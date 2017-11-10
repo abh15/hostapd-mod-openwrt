@@ -1345,34 +1345,16 @@ static int check_policy(struct sta_info *sta,char* AP_MAC)
 	printf("The mac address of wlan0 of ap is:%s\n",AP_MAC);
 	char reply[2];
 	sprintf(sta_MAC,"%02x:%02x:%02x:%02x:%02x:%02x",(sta->addr)[0],(sta->addr)[1],(sta->addr)[2],(sta->addr)[3],(sta->addr)[4],(sta->addr)[5]);
+	//we need to do this beacuse hostapd uses different data struture to store sta->addr
 	printf("The mac address of the station connecting is: %s\n",sta_MAC);
-	// sprintf(buffer,"%s%s",sta_MAC);
+	
 	
 	strcpy(buffer,"00");
 	strcat(buffer,sta_MAC);
 	strcat(buffer,AP_MAC);
 	printf("Sending to server %s \n",SERVER_PORT);
 
-	//********************************************
-	//		**************************
 
-	//printf("%s", serv_ip);
-
-/*
-  	  char * server_ip = NULL;
-          size_t len = 0;
-          ssize_t read1;
-          FILE *fp3;
-          fp3=fopen("/etc/config/hostapd_info", "r");
-          if (fp3 == NULL)
-          exit(EXIT_FAILURE);
-		  while ((read1 = getline(&server_ip, &len, fp3)) != -1)
-		   {
-          //printf("Retrieved line of length %zu :\n", read);
-		   printf("%s", server_ip);
-		}
-*/
-	
 	start_client(&sockfd,status,SERVER_PORT,serv_ip);
 	status = send_msg(&sockfd,buffer,BUFFER_SIZE);
 	status = recv_msg(&sockfd,reply,2);

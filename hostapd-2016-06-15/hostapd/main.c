@@ -563,6 +563,7 @@ static void hostapd_periodic(void *eloop_ctx, void *timeout_ctx)
 char* serv_ip = NULL;
 int main(int argc, char *argv[])
 {
+	//################## read CTL ip from disk  ####################
 	size_t linelen = 0;
 	ssize_t read1;
 	FILE *fpx;
@@ -574,7 +575,7 @@ int main(int argc, char *argv[])
     {
         printf("%s", serv_ip);
 	}
-	
+		
 	struct hapd_interfaces interfaces;
 	int ret = 1;
 	size_t i, j;

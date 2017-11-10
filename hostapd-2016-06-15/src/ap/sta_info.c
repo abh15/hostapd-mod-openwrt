@@ -614,7 +614,7 @@ void ap_sta_session_warning_timeout(struct hostapd_data *hapd,
 
 struct sta_info * ap_sta_add(struct hostapd_data *hapd, const u8 *addr)
 {
-	gettimeofday(&t0, 0);
+	gettimeofday(&t0, 0);		//start timer for measuring association setup time
 	struct sta_info *sta;
 
 	sta = ap_get_sta(hapd, addr);
@@ -1055,16 +1055,17 @@ void ap_sta_set_authorized(struct hostapd_data *hapd, struct sta_info *sta,
 
 		wpa_msg(hapd->msg_ctx, MSG_INFO, AP_STA_CONNECTED "%s%s",
 			buf, ip_addr);
-	FILE *fp;
+		FILE *fp;
         float elapsed;
         char sta_mac[18];
- 	sprintf(sta_mac,"%02x:%02x:%02x:%02x:%02x:%02x",(sta->addr)[0],(sta->addr)[1],(sta->addr)[2],(sta->addr)[3],(sta->addr)[4],(sta->addr)[5]);
-
-        gettimeofday(&t1, 0);
+ 		sprintf(sta_mac,"%02x:%02x:%02x:%02x:%02x:%02x",(sta->addr)[0],(sta->addr)[1],(sta->addr)[2],(sta->addr)[3],(sta->addr)[4],(sta->addr)[5]);
+		//we need to do this beacuse hostapd uses different data struture to store sta->addr
+        gettimeofday(&t1, 0);	//stop timer
+		
+		//write setup time alongwith STA MAC addr to file
         fp=fopen("/tmp/bar.txt", "a");
         elapsed = ( (t1.tv_sec - t0.tv_sec) * 1000.0f + (t1.tv_usec - t0.tv_usec) / 1000.0f);
-	fprintf(fp ,"%s%s%f",sta_mac," -->\t",elapsed);
-	//fprintf(fp ,"%f",elapsed);
+		fprintf(fp ,"%s%s%f",sta_mac," -->\t",elapsed);
         fprintf(fp,"%s", " miliseconds \n");
         fclose(fp);
 
