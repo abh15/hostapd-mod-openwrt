@@ -1,0 +1,7 @@
+Netconf xml 
+<wifiparams xmlns="urn:ietf:params:xml:ns:yang:openwrt-network">
+<txpower>14</txpower>
+<channel>6</channel>
+</wifiparams>
+
+
