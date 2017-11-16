@@ -1060,7 +1060,7 @@ fail:
 			P2P_PENDING_GO_NEG_RESPONSE_FAILURE;
 	if (p2p_send_action(p2p, freq, sa, p2p->cfg->dev_addr,
 			    p2p->cfg->dev_addr,
-			    wpabuf_head(resp), wpabuf_len(resp), 500) < 0) {
+			    wpabuf_head(resp), wpabuf_len(resp), 100) < 0) {
 		p2p_dbg(p2p, "Failed to send Action frame");
 	}
 
@@ -1268,6 +1268,11 @@ void p2p_process_go_neg_resp(struct p2p_data *p2p, const u8 *sa,
 		dev->client_timeout = msg.config_timeout[1];
 	}
 
+	if (msg.wfd_subelems) {
+		wpabuf_free(dev->info.wfd_subelems);
+		dev->info.wfd_subelems = wpabuf_dup(msg.wfd_subelems);
+	}
+
 	if (!msg.operating_channel && !go) {
 		/*
 		 * Note: P2P Client may omit Operating Channel attribute to
@@ -1394,7 +1399,7 @@ fail:
 
 	if (p2p_send_action(p2p, freq, sa, p2p->cfg->dev_addr, sa,
 			    wpabuf_head(dev->go_neg_conf),
-			    wpabuf_len(dev->go_neg_conf), 200) < 0) {
+			    wpabuf_len(dev->go_neg_conf), 50) < 0) {
 		p2p_dbg(p2p, "Failed to send Action frame");
 		p2p_go_neg_failed(p2p, -1);
 		p2p->cfg->send_action_done(p2p->cfg->cb_ctx);

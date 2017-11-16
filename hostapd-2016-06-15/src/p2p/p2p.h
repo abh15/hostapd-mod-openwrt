@@ -1716,6 +1716,12 @@ struct p2p_group_config {
 	int freq;
 
 	/**
+	 * ip_addr_alloc - Whether IP address allocation within 4-way handshake
+	 *	is supported
+	 */
+	int ip_addr_alloc;
+
+	/**
 	 * cb_ctx - Context to use with callback functions
 	 */
 	void *cb_ctx;
@@ -1902,8 +1908,10 @@ int p2p_assoc_req_ie(struct p2p_data *p2p, const u8 *bssid, u8 *buf,
  * @p2p: P2P module context from p2p_init()
  * @ies: Buffer for writing P2P IE
  * @dev_id: Device ID to search for or %NULL for any
+ * @bands: Frequency bands used in the scan (enum wpa_radio_work_band bitmap)
  */
-void p2p_scan_ie(struct p2p_data *p2p, struct wpabuf *ies, const u8 *dev_id);
+void p2p_scan_ie(struct p2p_data *p2p, struct wpabuf *ies, const u8 *dev_id,
+		 unsigned int bands);
 
 /**
  * p2p_scan_ie_buf_len - Get maximum buffer length needed for p2p_scan_ie
@@ -2123,6 +2131,16 @@ int p2p_client_limit_reached(struct p2p_group *group);
  * Returns: A P2P Device Address for each call and %NULL for no more members
  */
 const u8 * p2p_iterate_group_members(struct p2p_group *group, void **next);
+
+/**
+ * p2p_group_get_client_interface_addr - Get P2P Interface Address of a client in a group
+ * @group: P2P group context from p2p_group_init()
+ * @dev_addr: P2P Device Address of the client
+ * Returns: P2P Interface Address of the client if found or %NULL if no match
+ * found
+ */
+const u8 * p2p_group_get_client_interface_addr(struct p2p_group *group,
+					       const u8 *dev_addr);
 
 /**
  * p2p_group_get_dev_addr - Get a P2P Device Address of a client in a group

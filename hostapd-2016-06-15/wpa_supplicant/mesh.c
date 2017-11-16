@@ -181,13 +181,7 @@ static int wpa_supplicant_mesh_init(struct wpa_supplicant *wpa_s,
 	ifmsh->mconf = mconf;
 
 	/* need conf->hw_mode for supported rates. */
-	if (ssid->frequency == 0) {
-		conf->hw_mode = HOSTAPD_MODE_IEEE80211G;
-		conf->channel = 1;
-	} else {
-		conf->hw_mode = ieee80211_freq_to_chan(ssid->frequency,
-						       &conf->channel);
-	}
+	conf->hw_mode = ieee80211_freq_to_chan(ssid->frequency, &conf->channel);
 	if (conf->hw_mode == NUM_HOSTAPD_MODES) {
 		wpa_printf(MSG_ERROR, "Unsupported mesh mode frequency: %d MHz",
 			   ssid->frequency);
@@ -417,7 +411,7 @@ int wpa_supplicant_join_mesh(struct wpa_supplicant *wpa_s,
 		wpa_ssid_txt(ssid->ssid, ssid->ssid_len));
 	ret = wpa_drv_join_mesh(wpa_s, &params);
 	if (ret)
-		wpa_msg(wpa_s, MSG_ERROR, "mesh join error=%d\n", ret);
+		wpa_msg(wpa_s, MSG_ERROR, "mesh join error=%d", ret);
 
 	/* hostapd sets the interface down until we associate */
 	wpa_drv_set_operstate(wpa_s, 1);
@@ -591,9 +585,22 @@ int wpas_mesh_add_interface(struct wpa_supplicant *wpa_s, char *ifname,
 	if (!mesh_wpa_s) {
 		wpa_printf(MSG_ERROR,
 			   "mesh: Failed to create new wpa_supplicant interface");
-		wpa_supplicant_remove_iface(wpa_s->global, wpa_s, 0);
+		wpa_drv_if_remove(wpa_s, WPA_IF_MESH, ifname);
 		return -1;
 	}
 	mesh_wpa_s->mesh_if_created = 1;
 	return 0;
+}
+
+
+int wpas_mesh_peer_remove(struct wpa_supplicant *wpa_s, const u8 *addr)
+{
+	return mesh_mpm_close_peer(wpa_s, addr);
+}
+
+
+int wpas_mesh_peer_add(struct wpa_supplicant *wpa_s, const u8 *addr,
+		       int duration)
+{
+	return mesh_mpm_connect_peer(wpa_s, addr, duration);
 }

@@ -113,8 +113,8 @@ static int eap_fast_session_ticket_cb(void *ctx, const u8 *ticket, size_t len,
 }
 
 
-static int eap_fast_parse_phase1(struct eap_fast_data *data,
-				 const char *phase1)
+static void eap_fast_parse_phase1(struct eap_fast_data *data,
+				  const char *phase1)
 {
 	const char *pos;
 
@@ -140,8 +140,6 @@ static int eap_fast_parse_phase1(struct eap_fast_data *data,
 		wpa_printf(MSG_DEBUG, "EAP-FAST: Using binary format for PAC "
 			   "list");
 	}
-
-	return 0;
 }
 
 
@@ -159,10 +157,8 @@ static void * eap_fast_init(struct eap_sm *sm)
 	data->fast_version = EAP_FAST_VERSION;
 	data->max_pac_list_len = 10;
 
-	if (config->phase1 && eap_fast_parse_phase1(data, config->phase1) < 0) {
-		eap_fast_deinit(sm, data);
-		return NULL;
-	}
+	if (config->phase1)
+		eap_fast_parse_phase1(data, config->phase1);
 
 	if (eap_peer_select_phase2_methods(config, "auth=",
 					   &data->phase2_types,
@@ -279,7 +275,7 @@ static int eap_fast_derive_key_auth(struct eap_sm *sm,
 	 * Extra key material after TLS key_block: session_key_seed[40]
 	 */
 
-	sks = eap_fast_derive_key(sm->ssl_ctx, data->ssl.conn, "key expansion",
+	sks = eap_fast_derive_key(sm->ssl_ctx, data->ssl.conn,
 				  EAP_FAST_SKS_LEN);
 	if (sks == NULL) {
 		wpa_printf(MSG_DEBUG, "EAP-FAST: Failed to derive "
@@ -307,7 +303,6 @@ static int eap_fast_derive_key_provisioning(struct eap_sm *sm,
 	os_free(data->key_block_p);
 	data->key_block_p = (struct eap_fast_key_block_provisioning *)
 		eap_fast_derive_key(sm->ssl_ctx, data->ssl.conn,
-				    "key expansion",
 				    sizeof(*data->key_block_p));
 	if (data->key_block_p == NULL) {
 		wpa_printf(MSG_DEBUG, "EAP-FAST: Failed to derive key block");
@@ -714,9 +709,10 @@ static int eap_fast_get_cmk(struct eap_sm *sm, struct eap_fast_data *data,
 	if (eap_fast_get_phase2_key(sm, data, isk, sizeof(isk)) < 0)
 		return -1;
 	wpa_hexdump_key(MSG_MSGDUMP, "EAP-FAST: ISK[j]", isk, sizeof(isk));
-	sha1_t_prf(data->simck, EAP_FAST_SIMCK_LEN,
-		   "Inner Methods Compound Keys",
-		   isk, sizeof(isk), imck, sizeof(imck));
+	if (sha1_t_prf(data->simck, EAP_FAST_SIMCK_LEN,
+		       "Inner Methods Compound Keys",
+		       isk, sizeof(isk), imck, sizeof(imck)) < 0)
+		return -1;
 	data->simck_idx++;
 	os_memcpy(data->simck, imck, EAP_FAST_SIMCK_LEN);
 	wpa_hexdump_key(MSG_MSGDUMP, "EAP-FAST: S-IMCK[j]",

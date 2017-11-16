@@ -54,6 +54,13 @@
 #define HOSTAPD_CHAN_VHT_130_30 0x04000000
 #define HOSTAPD_CHAN_VHT_150_10 0x08000000
 
+/* Filter gratuitous ARP */
+#define WPA_DATA_FRAME_FILTER_FLAG_ARP BIT(0)
+/* Filter unsolicited Neighbor Advertisement */
+#define WPA_DATA_FRAME_FILTER_FLAG_NA BIT(1)
+/* Filter unicast IP packets encrypted using the GTK */
+#define WPA_DATA_FRAME_FILTER_FLAG_GTK BIT(2)
+
 /**
  * enum reg_change_initiator - Regulatory change initiator
  */
@@ -293,6 +300,18 @@ struct wpa_interface_info {
 #define WPAS_MAX_SCAN_SSIDS 16
 
 /**
+ * struct wpa_driver_scan_ssid - SSIDs to scan for
+ * @ssid - specific SSID to scan for (ProbeReq)
+ *	%NULL or zero-length SSID is used to indicate active scan
+ *	with wildcard SSID.
+ * @ssid_len - Length of the SSID in octets
+ */
+struct wpa_driver_scan_ssid {
+	const u8 *ssid;
+	size_t ssid_len;
+};
+
+/**
  * struct wpa_driver_scan_params - Scan parameters
  * Data for struct wpa_driver_ops::scan2().
  */
@@ -300,18 +319,7 @@ struct wpa_driver_scan_params {
 	/**
 	 * ssids - SSIDs to scan for
 	 */
-	struct wpa_driver_scan_ssid {
-		/**
-		 * ssid - specific SSID to scan for (ProbeReq)
-		 * %NULL or zero-length SSID is used to indicate active scan
-		 * with wildcard SSID.
-		 */
-		const u8 *ssid;
-		/**
-		 * ssid_len: Length of the SSID in octets
-		 */
-		size_t ssid_len;
-	} ssids[WPAS_MAX_SCAN_SSIDS];
+	struct wpa_driver_scan_ssid ssids[WPAS_MAX_SCAN_SSIDS];
 
 	/**
 	 * num_ssids - Number of entries in ssids array
@@ -437,6 +445,15 @@ struct wpa_driver_scan_params {
 	 * sched_scan_plans_num - Number of scan plans in sched_scan_plans array
 	 */
 	 unsigned int sched_scan_plans_num;
+
+	/**
+	 * bssid - Specific BSSID to scan for
+	 *
+	 * This optional parameter can be used to replace the default wildcard
+	 * BSSID with a specific BSSID to scan for if results are needed from
+	 * only a single BSS.
+	 */
+	const u8 *bssid;
 
 	/*
 	 * NOTE: Whenever adding new parameters here, please make sure
@@ -859,6 +876,12 @@ struct wpa_driver_associate_params {
 	 * RRM (Radio Resource Measurements)
 	 */
 	int rrm_used;
+
+	/**
+	 * pbss - If set, connect to a PCP in a PBSS. Otherwise, connect to an
+	 * AP as usual. Valid for DMG network only.
+	 */
+	int pbss;
 };
 
 enum hide_ssid {
@@ -1086,6 +1109,12 @@ struct wpa_driver_ap_params {
 	 * reenable - Whether this is to re-enable beaconing
 	 */
 	int reenable;
+
+	/**
+	 * pbss - Whether to start a PCP (in PBSS) instead of an AP in
+	 * infrastructure BSS. Valid only for DMG network.
+	 */
+	int pbss;
 };
 
 struct wpa_driver_mesh_bss_params {
@@ -1247,7 +1276,12 @@ struct wpa_driver_capa {
 #define WPA_DRIVER_FLAGS_SUPPORT_HW_MODE_ANY	0x0000004000000000ULL
 /** Driver supports simultaneous off-channel operations */
 #define WPA_DRIVER_FLAGS_OFFCHANNEL_SIMULTANEOUS	0x0000008000000000ULL
+/** Driver supports full AP client state */
+#define WPA_DRIVER_FLAGS_FULL_AP_CLIENT_STATE	0x0000010000000000ULL
 	u64 flags;
+
+#define FULL_AP_CLIENT_STATE_SUPP(drv_flags) \
+	(drv_flags & WPA_DRIVER_FLAGS_FULL_AP_CLIENT_STATE)
 
 #define WPA_DRIVER_SMPS_MODE_STATIC			0x00000001
 #define WPA_DRIVER_SMPS_MODE_DYNAMIC			0x00000002
@@ -1338,6 +1372,12 @@ struct wpa_driver_capa {
  * offset, namely the 6th byte in the Action frame body.
  */
 #define WPA_DRIVER_FLAGS_TX_POWER_INSERTION		0x00000008
+/**
+ * Driver supports RRM. With this support, the driver will accept to use RRM in
+ * (Re)Association Request frames, without supporting quiet period.
+ */
+#define WPA_DRIVER_FLAGS_SUPPORT_RRM			0x00000010
+
 	u32 rrm_flags;
 
 	/* Driver concurrency capabilities */
@@ -1355,7 +1395,9 @@ struct wpa_driver_capa {
 struct hostapd_data;
 
 struct hostap_sta_driver_data {
-	unsigned long rx_packets, tx_packets, rx_bytes, tx_bytes;
+	unsigned long rx_packets, tx_packets;
+	unsigned long long rx_bytes, tx_bytes;
+	int bytes_64bit; /* whether 64-bit byte counters are supported */
 	unsigned long current_tx_rate;
 	unsigned long inactive_msec;
 	unsigned long flags;
@@ -1390,6 +1432,7 @@ struct hostapd_sta_add_params {
 	size_t supp_channels_len;
 	const u8 *supp_oper_classes;
 	size_t supp_oper_classes_len;
+	int support_p2p_ps;
 };
 
 struct mac_address {
@@ -1495,6 +1538,7 @@ struct wpa_bss_params {
 #define WPA_STA_MFP BIT(3)
 #define WPA_STA_TDLS_PEER BIT(4)
 #define WPA_STA_AUTHENTICATED BIT(5)
+#define WPA_STA_ASSOCIATED BIT(6)
 
 enum tdls_oper {
 	TDLS_DISCOVERY_REQ,
@@ -1928,6 +1972,14 @@ struct wpa_driver_ops {
 	void (*poll)(void *priv);
 
 	/**
+	 * get_ifindex - Get interface index
+	 * @priv: private driver interface data
+	 *
+	 * Returns: Interface index
+	 */
+	unsigned int (*get_ifindex)(void *priv);
+
+	/**
 	 * get_ifname - Get interface name
 	 * @priv: private driver interface data
 	 *
@@ -2061,6 +2113,7 @@ struct wpa_driver_ops {
 
 	/**
 	 * global_init - Global driver initialization
+	 * @ctx: wpa_global pointer
 	 * Returns: Pointer to private data (global), %NULL on failure
 	 *
 	 * This optional function is called to initialize the driver wrapper
@@ -2070,7 +2123,7 @@ struct wpa_driver_ops {
 	 * use init2() function instead of init() to get the pointer to global
 	 * data available to per-interface initializer.
 	 */
-	void * (*global_init)(void);
+	void * (*global_init)(void *ctx);
 
 	/**
 	 * global_deinit - Global driver deinitialization
@@ -2356,12 +2409,17 @@ struct wpa_driver_ops {
 	 * @params: Station parameters
 	 * Returns: 0 on success, -1 on failure
 	 *
-	 * This function is used to add a station entry to the driver once the
-	 * station has completed association. This is only used if the driver
+	 * This function is used to add or set (params->set 1) a station
+	 * entry in the driver. Adding STA entries is used only if the driver
 	 * does not take care of association processing.
 	 *
-	 * With TDLS, this function is also used to add or set (params->set 1)
-	 * TDLS peer entries.
+	 * With drivers that don't support full AP client state, this function
+	 * is used to add a station entry to the driver once the station has
+	 * completed association.
+	 *
+	 * With TDLS, this function is used to add or set (params->set 1)
+	 * TDLS peer entries (even with drivers that do not support full AP
+	 * client state).
 	 */
 	int (*sta_add)(void *priv, struct hostapd_sta_add_params *params);
 
@@ -3493,6 +3551,28 @@ struct wpa_driver_ops {
 	 * Returns 0 on success, -1 on failure
 	 */
 	int (*abort_scan)(void *priv);
+
+	/**
+	 * configure_data_frame_filters - Request to configure frame filters
+	 * @priv: Private driver interface data
+	 * @filter_flags: The type of frames to filter (bitfield of
+	 * WPA_DATA_FRAME_FILTER_FLAG_*)
+	 * Returns: 0 on success or -1 on failure
+	 */
+	int (*configure_data_frame_filters)(void *priv, u32 filter_flags);
+
+	/**
+	 * get_ext_capab - Get extended capabilities for the specified interface
+	 * @priv: Private driver interface data
+	 * @type: Interface type for which to get extended capabilities
+	 * @ext_capab: Extended capabilities fetched
+	 * @ext_capab_mask: Extended capabilities mask
+	 * @ext_capab_len: Length of the extended capabilities
+	 * Returns: 0 on success or -1 on failure
+	 */
+	int (*get_ext_capab)(void *priv, enum wpa_driver_if_type type,
+			     const u8 **ext_capab, const u8 **ext_capab_mask,
+			     unsigned int *ext_capab_len);
 };
 
 
@@ -4234,6 +4314,7 @@ union wpa_event_data {
 	 * struct interface_status - Data for EVENT_INTERFACE_STATUS
 	 */
 	struct interface_status {
+		unsigned int ifindex;
 		char ifname[100];
 		enum {
 			EVENT_INTERFACE_ADDED, EVENT_INTERFACE_REMOVED
@@ -4361,6 +4442,12 @@ union wpa_event_data {
 		 * status_code - Status Code from (Re)association Response
 		 */
 		u16 status_code;
+
+		/**
+		 * timed_out - Whether failure is due to timeout (etc.) rather
+		 * than explicit rejection response from the AP.
+		 */
+		int timed_out;
 	} assoc_reject;
 
 	struct timeout_event {
@@ -4710,6 +4797,18 @@ union wpa_event_data {
 void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 			  union wpa_event_data *data);
 
+/**
+ * wpa_supplicant_event_global - Report a driver event for wpa_supplicant
+ * @ctx: Context pointer (wpa_s); this is the ctx variable registered
+ *	with struct wpa_driver_ops::init()
+ * @event: event type (defined above)
+ * @data: possible extra data for the event
+ *
+ * Same as wpa_supplicant_event(), but we search for the interface in
+ * wpa_global.
+ */
+void wpa_supplicant_event_global(void *ctx, enum wpa_event_type event,
+				 union wpa_event_data *data);
 
 /*
  * The following inline functions are provided for convenience to simplify

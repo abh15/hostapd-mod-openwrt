@@ -20,7 +20,7 @@ def add_wmm_ap(apdev, acm_list):
     for ac in acm_list:
         params["wmm_ac_%s_acm" % (ac.lower())] = "1"
 
-    return hostapd.add_ap(apdev['ifname'], params)
+    return hostapd.add_ap(apdev, params)
 
 def test_tspec(dev, apdev):
     """Basic addts/delts tests"""
@@ -215,7 +215,7 @@ def test_tspec_not_enabled(dev, apdev):
                "hw_mode": "g",
                "channel": "11",
                "wmm_enabled" : "0" }
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     dev[0].connect("wmm_no_ac", key_mgmt="NONE", scan_freq="2462")
     status = dev[0].request("WMM_AC_STATUS")
     if "Not associated to a WMM AP, WMM AC is Disabled" not in status:

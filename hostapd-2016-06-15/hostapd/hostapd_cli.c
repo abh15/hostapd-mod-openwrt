@@ -16,6 +16,7 @@
 #include "utils/edit.h"
 #include "common/version.h"
 
+#ifndef CONFIG_NO_CTRL_IFACE
 
 static const char *const hostapd_cli_version =
 "hostapd_cli v" VERSION_STR "\n"
@@ -136,12 +137,18 @@ static void usage(void)
 
 static struct wpa_ctrl * hostapd_cli_open_connection(const char *ifname)
 {
+#ifndef CONFIG_CTRL_IFACE_UDP
 	char *cfile;
 	int flen;
+#endif /* !CONFIG_CTRL_IFACE_UDP */
 
 	if (ifname == NULL)
 		return NULL;
 
+#ifdef CONFIG_CTRL_IFACE_UDP
+	ctrl_conn = wpa_ctrl_open(ifname);
+	return ctrl_conn;
+#else /* CONFIG_CTRL_IFACE_UDP */
 	flen = strlen(ctrl_iface_dir) + strlen(ifname) + 2;
 	cfile = malloc(flen);
 	if (cfile == NULL)
@@ -158,6 +165,7 @@ static struct wpa_ctrl * hostapd_cli_open_connection(const char *ifname)
 	ctrl_conn = wpa_ctrl_open2(cfile, client_socket_dir);
 	free(cfile);
 	return ctrl_conn;
+#endif /* CONFIG_CTRL_IFACE_UDP */
 }
 
 
@@ -212,6 +220,52 @@ static int _wpa_ctrl_command(struct wpa_ctrl *ctrl, char *cmd, int print)
 static inline int wpa_ctrl_command(struct wpa_ctrl *ctrl, char *cmd)
 {
 	return _wpa_ctrl_command(ctrl, cmd, 1);
+}
+
+
+static int write_cmd(char *buf, size_t buflen, const char *cmd, int argc,
+		     char *argv[])
+{
+	int i, res;
+	char *pos, *end;
+
+	pos = buf;
+	end = buf + buflen;
+
+	res = os_snprintf(pos, end - pos, "%s", cmd);
+	if (os_snprintf_error(end - pos, res))
+		goto fail;
+	pos += res;
+
+	for (i = 0; i < argc; i++) {
+		res = os_snprintf(pos, end - pos, " %s", argv[i]);
+		if (os_snprintf_error(end - pos, res))
+			goto fail;
+		pos += res;
+	}
+
+	buf[buflen - 1] = '\0';
+	return 0;
+
+fail:
+	printf("Too long command\n");
+	return -1;
+}
+
+
+static int hostapd_cli_cmd(struct wpa_ctrl *ctrl, const char *cmd,
+			   int min_args, int argc, char *argv[])
+{
+	char buf[4096];
+
+	if (argc < min_args) {
+		printf("Invalid %s command - at least %d argument%s required.\n",
+		       cmd, min_args, min_args > 1 ? "s are" : " is");
+		return -1;
+	}
+	if (write_cmd(buf, sizeof(buf), cmd, argc, argv) < 0)
+		return -1;
+	return wpa_ctrl_command(ctrl, buf);
 }
 
 
@@ -1068,6 +1122,102 @@ static int hostapd_cli_cmd_log_level(struct wpa_ctrl *ctrl, int argc,
 }
 
 
+static int hostapd_cli_cmd_raw(struct wpa_ctrl *ctrl, int argc, char *argv[])
+{
+	if (argc == 0)
+		return -1;
+	return hostapd_cli_cmd(ctrl, argv[0], 0, argc - 1, &argv[1]);
+}
+
+
+static int hostapd_cli_cmd_pmksa(struct wpa_ctrl *ctrl, int argc, char *argv[])
+{
+	return wpa_ctrl_command(ctrl, "PMKSA");
+}
+
+
+static int hostapd_cli_cmd_pmksa_flush(struct wpa_ctrl *ctrl, int argc,
+				       char *argv[])
+{
+	return wpa_ctrl_command(ctrl, "PMKSA_FLUSH");
+}
+
+
+static int hostapd_cli_cmd_set_neighbor(struct wpa_ctrl *ctrl, int argc,
+					char *argv[])
+{
+	char cmd[2048];
+	int res;
+
+	if (argc < 3 || argc > 5) {
+		printf("Invalid set_neighbor command: needs 3-5 arguments\n");
+		return -1;
+	}
+
+	res = os_snprintf(cmd, sizeof(cmd), "SET_NEIGHBOR %s %s %s %s %s",
+			  argv[0], argv[1], argv[2], argc >= 4 ? argv[3] : "",
+			  argc == 5 ? argv[4] : "");
+	if (os_snprintf_error(sizeof(cmd), res)) {
+		printf("Too long SET_NEIGHBOR command.\n");
+		return -1;
+	}
+	return wpa_ctrl_command(ctrl, cmd);
+}
+
+
+static int hostapd_cli_cmd_remove_neighbor(struct wpa_ctrl *ctrl, int argc,
+					   char *argv[])
+{
+	char cmd[400];
+	int res;
+
+	if (argc != 2) {
+		printf("Invalid remove_neighbor command: needs 2 arguments\n");
+		return -1;
+	}
+
+	res = os_snprintf(cmd, sizeof(cmd), "REMOVE_NEIGHBOR %s %s",
+			  argv[0], argv[1]);
+	if (os_snprintf_error(sizeof(cmd), res)) {
+		printf("Too long REMOVE_NEIGHBOR command.\n");
+		return -1;
+	}
+	return wpa_ctrl_command(ctrl, cmd);
+}
+
+
+static int hostapd_cli_cmd_req_lci(struct wpa_ctrl *ctrl, int argc,
+				   char *argv[])
+{
+	char cmd[256];
+	int res;
+
+	if (argc != 1) {
+		printf("Invalid req_lci command - requires destination address\n");
+		return -1;
+	}
+
+	res = os_snprintf(cmd, sizeof(cmd), "REQ_LCI %s", argv[0]);
+	if (os_snprintf_error(sizeof(cmd), res)) {
+		printf("Too long REQ_LCI command.\n");
+		return -1;
+	}
+	return wpa_ctrl_command(ctrl, cmd);
+}
+
+
+static int hostapd_cli_cmd_req_range(struct wpa_ctrl *ctrl, int argc,
+				     char *argv[])
+{
+	if (argc < 4) {
+		printf("Invalid req_range command: needs at least 4 arguments - dest address, randomization interval, min AP count, and 1 to 16 AP addresses\n");
+		return -1;
+	}
+
+	return hostapd_cli_cmd(ctrl, "REQ_RANGE", 4, argc, argv);
+}
+
+
 struct hostapd_cli_cmd {
 	const char *cmd;
 	int (*handler)(struct wpa_ctrl *ctrl, int argc, char *argv[]);
@@ -1110,6 +1260,7 @@ static const struct hostapd_cli_cmd hostapd_cli_commands[] = {
 #ifdef CONFIG_FST
 	{ "fst", hostapd_cli_cmd_fst },
 #endif /* CONFIG_FST */
+	{ "raw", hostapd_cli_cmd_raw },
 	{ "level", hostapd_cli_cmd_level },
 	{ "license", hostapd_cli_cmd_license },
 	{ "quit", hostapd_cli_cmd_quit },
@@ -1126,6 +1277,12 @@ static const struct hostapd_cli_cmd hostapd_cli_commands[] = {
 	{ "disable", hostapd_cli_cmd_disable },
 	{ "erp_flush", hostapd_cli_cmd_erp_flush },
 	{ "log_level", hostapd_cli_cmd_log_level },
+	{ "pmksa", hostapd_cli_cmd_pmksa },
+	{ "pmksa_flush", hostapd_cli_cmd_pmksa_flush },
+	{ "set_neighbor", hostapd_cli_cmd_set_neighbor },
+	{ "remove_neighbor", hostapd_cli_cmd_remove_neighbor },
+	{ "req_lci", hostapd_cli_cmd_req_lci },
+	{ "req_range", hostapd_cli_cmd_req_range },
 	{ NULL, NULL }
 };
 
@@ -1444,7 +1601,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (daemonize && os_daemonize(pid_file))
+	if (daemonize && os_daemonize(pid_file) && eloop_sock_requeue())
 		return -1;
 
 	if (interactive)
@@ -1459,3 +1616,12 @@ int main(int argc, char *argv[])
 	hostapd_cli_cleanup();
 	return 0;
 }
+
+#else /* CONFIG_NO_CTRL_IFACE */
+
+int main(int argc, char *argv[])
+{
+	return -1;
+}
+
+#endif /* CONFIG_NO_CTRL_IFACE */

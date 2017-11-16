@@ -139,7 +139,7 @@ def start_p2p(dev, apdev):
         params['channel'] = '6'
     elif peer['listen_freq'] == "2462":
         params['channel'] = '11'
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     hapd.set("ext_mgmt_frame_handling", "1")
     return addr0, bssid, hapd, int(params['channel'])
 
@@ -240,7 +240,7 @@ def test_p2p_msg_long_ssid(dev, apdev):
     msg['payload'] += ie_p2p(attrs)
     msg['payload'] += ie_ssid(255 * 'A')
     hapd.mgmt_tx(msg)
-    ev = dev[0].wait_event(["P2P-DEVICE-FOUND"], timeout=5)
+    ev = dev[0].wait_global_event(["P2P-DEVICE-FOUND"], timeout=5)
     if ev is None:
         raise Exception("Timeout on device found event")
 

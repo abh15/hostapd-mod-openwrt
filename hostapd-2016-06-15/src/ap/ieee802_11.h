@@ -102,11 +102,37 @@ int auth_sae_init_committed(struct hostapd_data *hapd, struct sta_info *sta);
 #ifdef CONFIG_SAE
 void sae_clear_retransmit_timer(struct hostapd_data *hapd,
 				struct sta_info *sta);
+void sae_accept_sta(struct hostapd_data *hapd, struct sta_info *sta);
 #else /* CONFIG_SAE */
 static inline void sae_clear_retransmit_timer(struct hostapd_data *hapd,
 					      struct sta_info *sta)
 {
 }
 #endif /* CONFIG_SAE */
+
+#ifdef CONFIG_MBO
+
+u8 * hostapd_eid_mbo(struct hostapd_data *hapd, u8 *eid, size_t len);
+
+u8 hostapd_mbo_ie_len(struct hostapd_data *hapd);
+
+#else /* CONFIG_MBO */
+
+static inline u8 * hostapd_eid_mbo(struct hostapd_data *hapd, u8 *eid,
+				   size_t len)
+{
+	return eid;
+}
+
+static inline u8 hostapd_mbo_ie_len(struct hostapd_data *hapd)
+{
+	return 0;
+}
+
+#endif /* CONFIG_MBO */
+
+void ap_copy_sta_supp_op_classes(struct sta_info *sta,
+				 const u8 *supp_op_classes,
+				 size_t supp_op_classes_len);
 
 #endif /* IEEE802_11_H */

@@ -1207,7 +1207,7 @@ static int match_group_where_peer_is_client(struct p2p_group *group,
 					 cfg->ssid_len);
 	if (wpa_s_go != NULL && wpa_s_go == data->wpa_s) {
 		wpas_dbus_signal_peer_groups_changed(
-			data->wpa_s->parent, data->info->p2p_device_addr);
+			data->wpa_s->p2pdev, data->info->p2p_device_addr);
 		return 0;
 	}
 
@@ -1224,7 +1224,7 @@ static void signal_peer_groups_changed(struct p2p_peer_info *info,
 	wpa_s_go = wpas_get_p2p_client_iface(data->wpa_s,
 					     info->p2p_device_addr);
 	if (wpa_s_go != NULL && wpa_s_go == data->wpa_s) {
-		wpas_dbus_signal_peer_groups_changed(data->wpa_s->parent,
+		wpas_dbus_signal_peer_groups_changed(data->wpa_s->p2pdev,
 						     info->p2p_device_addr);
 		return;
 	}
@@ -1254,14 +1254,11 @@ static void peer_groups_changed(struct wpa_supplicant *wpa_s)
  * irrespective of the role (client/GO) of the current device
  *
  * @wpa_s: %wpa_supplicant network interface data
- * @ssid: SSID object
  * @client: this device is P2P client
- * @network_id: network id of the group started, use instead of ssid->id
- *	to account for persistent groups
+ * @persistent: 0 - non persistent group, 1 - persistent group
  */
 void wpas_dbus_signal_p2p_group_started(struct wpa_supplicant *wpa_s,
-					const struct wpa_ssid *ssid,
-					int client, int network_id)
+					int client, int persistent)
 {
 	DBusMessage *msg;
 	DBusMessageIter iter, dict_iter;
@@ -1300,6 +1297,7 @@ void wpas_dbus_signal_p2p_group_started(struct wpa_supplicant *wpa_s,
 					      wpa_s->dbus_new_path) ||
 	    !wpa_dbus_dict_append_string(&dict_iter, "role",
 					 client ? "client" : "GO") ||
+	    !wpa_dbus_dict_append_bool(&dict_iter, "persistent", persistent) ||
 	    !wpa_dbus_dict_append_object_path(&dict_iter, "group_object",
 					      wpa_s->dbus_groupobj_path) ||
 	    !wpa_dbus_dict_close_write(&iter, &dict_iter)) {
@@ -1999,6 +1997,10 @@ void wpas_dbus_signal_prop_changed(struct wpa_supplicant *wpa_s,
 		break;
 	case WPAS_DBUS_PROP_DISCONNECT_REASON:
 		prop = "DisconnectReason";
+		flush = TRUE;
+		break;
+	case WPAS_DBUS_PROP_ASSOC_STATUS_CODE:
+		prop = "AssocStatusCode";
 		flush = TRUE;
 		break;
 	default:
@@ -3252,6 +3254,11 @@ static const struct wpa_dbus_property_desc wpas_dbus_interface_properties[] = {
 #endif /* CONFIG_P2P */
 	{ "DisconnectReason", WPAS_DBUS_NEW_IFACE_INTERFACE, "i",
 	  wpas_dbus_getter_disconnect_reason,
+	  NULL,
+	  NULL
+	},
+	{ "AssocStatusCode", WPAS_DBUS_NEW_IFACE_INTERFACE, "i",
+	  wpas_dbus_getter_assoc_status_code,
 	  NULL,
 	  NULL
 	},

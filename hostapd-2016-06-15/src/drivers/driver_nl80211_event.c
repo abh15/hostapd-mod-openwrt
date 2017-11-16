@@ -265,6 +265,7 @@ static void mlme_event_connect(struct wpa_driver_nl80211_data *drv,
 			       enum nl80211_commands cmd, struct nlattr *status,
 			       struct nlattr *addr, struct nlattr *req_ie,
 			       struct nlattr *resp_ie,
+			       struct nlattr *timed_out,
 			       struct nlattr *authorized,
 			       struct nlattr *key_replay_ctr,
 			       struct nlattr *ptk_kck,
@@ -284,6 +285,8 @@ static void mlme_event_connect(struct wpa_driver_nl80211_data *drv,
 			   "when using userspace SME", cmd);
 		return;
 	}
+
+	drv->connect_reassoc = 0;
 
 	status_code = status ? nla_get_u16(status) : WLAN_STATUS_SUCCESS;
 
@@ -320,6 +323,7 @@ static void mlme_event_connect(struct wpa_driver_nl80211_data *drv,
 			event.assoc_reject.resp_ies_len = nla_len(resp_ie);
 		}
 		event.assoc_reject.status_code = status_code;
+		event.assoc_reject.timed_out = timed_out != NULL;
 		wpa_supplicant_event(drv->ctx, EVENT_ASSOC_REJECT, &event);
 		return;
 	}
@@ -335,9 +339,9 @@ static void mlme_event_connect(struct wpa_driver_nl80211_data *drv,
 		event.assoc_info.req_ies_len = nla_len(req_ie);
 
 		if (cmd == NL80211_CMD_ROAM) {
-			ssid = nl80211_get_ie(event.assoc_info.req_ies,
-					      event.assoc_info.req_ies_len,
-					      WLAN_EID_SSID);
+			ssid = get_ie(event.assoc_info.req_ies,
+				      event.assoc_info.req_ies_len,
+				      WLAN_EID_SSID);
 			if (ssid && ssid[1] > 0 && ssid[1] <= 32) {
 				drv->ssid_len = ssid[1];
 				os_memcpy(drv->ssid, ssid + 2, ssid[1]);
@@ -572,9 +576,10 @@ static void mlme_event_mgmt(struct i802_bss *bss,
 		rx_freq = drv->last_mgmt_freq = event.rx_mgmt.freq;
 	}
 	wpa_printf(MSG_DEBUG,
-		   "nl80211: RX frame sa=" MACSTR
+		   "nl80211: RX frame da=" MACSTR " sa=" MACSTR " bssid=" MACSTR
 		   " freq=%d ssi_signal=%d fc=0x%x seq_ctrl=0x%x stype=%u (%s) len=%u",
-		   MAC2STR(mgmt->sa), rx_freq, ssi_signal, fc,
+		   MAC2STR(mgmt->da), MAC2STR(mgmt->sa), MAC2STR(mgmt->bssid),
+		   rx_freq, ssi_signal, fc,
 		   le_to_host16(mgmt->seq_ctrl), stype, fc2str(fc),
 		   (unsigned int) len);
 	event.rx_mgmt.frame = frame;
@@ -666,6 +671,24 @@ static void mlme_event_deauth_disassoc(struct wpa_driver_nl80211_data *drv,
 					   MAC2STR(bssid),
 					   MAC2STR(drv->auth_attempt_bssid));
 			}
+			return;
+		}
+
+		if (!(drv->capa.flags & WPA_DRIVER_FLAGS_SME) &&
+		    drv->connect_reassoc && drv->associated &&
+		    os_memcmp(bssid, drv->prev_bssid, ETH_ALEN) == 0 &&
+		    os_memcmp(bssid, drv->auth_attempt_bssid, ETH_ALEN) != 0) {
+			/*
+			 * Avoid issues with some roaming cases where
+			 * disconnection event for the old AP may show up after
+			 * we have started connection with the new AP.
+			 */
+			 wpa_printf(MSG_DEBUG,
+				    "nl80211: Ignore deauth/disassoc event from old AP "
+				    MACSTR
+				    " when already connecting with " MACSTR,
+				    MAC2STR(bssid),
+				    MAC2STR(drv->auth_attempt_bssid));
 			return;
 		}
 
@@ -1623,6 +1646,7 @@ static void qca_nl80211_key_mgmt_auth(struct wpa_driver_nl80211_data *drv,
 			   tb[QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_BSSID],
 			   tb[QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_REQ_IE],
 			   tb[QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_RESP_IE],
+			   NULL,
 			   tb[QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_AUTHORIZED],
 			   tb[QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_KEY_REPLAY_CTR],
 			   tb[QCA_WLAN_VENDOR_ATTR_ROAM_AUTH_PTK_KCK],
@@ -2111,6 +2135,7 @@ static void do_process_drv_event(struct i802_bss *bss, int cmd,
 				   tb[NL80211_ATTR_MAC],
 				   tb[NL80211_ATTR_REQ_IE],
 				   tb[NL80211_ATTR_RESP_IE],
+				   tb[NL80211_ATTR_TIMED_OUT],
 				   NULL, NULL, NULL, NULL, NULL);
 		break;
 	case NL80211_CMD_CH_SWITCH_NOTIFY:

@@ -170,6 +170,10 @@ ifdef CONFIG_ELOOP_EPOLL
 CFLAGS += -DCONFIG_ELOOP_EPOLL
 endif
 
+ifdef CONFIG_ELOOP_KQUEUE
+CFLAGS += -DCONFIG_ELOOP_KQUEUE
+endif
+
 ifdef CONFIG_EAPOL_TEST
 CFLAGS += -Werror -DEAPOL_TEST
 endif
@@ -308,7 +312,12 @@ endif
 ifdef CONFIG_IBSS_RSN
 NEED_RSN_AUTHENTICATOR=y
 CFLAGS += -DCONFIG_IBSS_RSN
+CFLAGS += -DCONFIG_NO_VLAN
 OBJS += ibss_rsn.o
+endif
+
+ifdef CONFIG_MATCH_IFACE
+CFLAGS += -DCONFIG_MATCH_IFACE
 endif
 
 ifdef CONFIG_P2P
@@ -835,6 +844,8 @@ OBJS += ../src/ap/ap_drv_ops.o
 OBJS += ../src/ap/beacon.o
 OBJS += ../src/ap/bss_load.o
 OBJS += ../src/ap/eap_user_db.o
+OBJS += ../src/ap/neighbor_db.o
+OBJS += ../src/ap/rrm.o
 ifdef CONFIG_IEEE80211N
 OBJS += ../src/ap/ieee802_11_ht.o
 ifdef CONFIG_IEEE80211AC
@@ -843,6 +854,9 @@ endif
 endif
 ifdef CONFIG_WNM
 OBJS += ../src/ap/wnm_ap.o
+endif
+ifdef CONFIG_MBO
+OBJS += ../src/ap/mbo_ap.o
 endif
 ifdef CONFIG_CTRL_IFACE
 OBJS += ../src/ap/ctrl_iface_ap.o
@@ -858,6 +872,11 @@ CFLAGS += -DCONFIG_IEEE80211N
 ifdef CONFIG_IEEE80211AC
 CFLAGS += -DCONFIG_IEEE80211AC
 endif
+endif
+
+ifdef CONFIG_MBO
+OBJS += mbo.o
+CFLAGS += -DCONFIG_MBO
 endif
 
 ifdef NEED_AP_MLME
@@ -1323,6 +1342,7 @@ endif
 CFLAGS += -DCONFIG_CTRL_IFACE
 ifeq ($(CONFIG_CTRL_IFACE), unix)
 CFLAGS += -DCONFIG_CTRL_IFACE_UNIX
+OBJS += ../src/common/ctrl_iface_common.o
 endif
 ifeq ($(CONFIG_CTRL_IFACE), udp)
 CFLAGS += -DCONFIG_CTRL_IFACE_UDP
@@ -1364,6 +1384,7 @@ ifndef DBUS_INCLUDE
 DBUS_INCLUDE := $(shell $(PKG_CONFIG) --cflags dbus-1)
 endif
 DBUS_CFLAGS += $(DBUS_INCLUDE)
+DBUS_INTERFACE=fi.epitest.hostap.WPASupplicant
 endif
 
 ifdef CONFIG_CTRL_IFACE_DBUS_NEW
@@ -1389,6 +1410,7 @@ DBUS_OBJS += dbus/dbus_new_introspect.o
 DBUS_CFLAGS += -DCONFIG_CTRL_IFACE_DBUS_INTRO
 endif
 DBUS_CFLAGS += $(DBUS_INCLUDE)
+DBUS_INTERFACE=fi.w1.wpa_supplicant1
 endif
 
 ifdef DBUS
@@ -1624,6 +1646,7 @@ endif
 OBJS += $(FST_OBJS)
 OBJS_t += $(FST_OBJS)
 OBJS_t2 += $(FST_OBJS)
+OBJS_nfc += $(FST_OBJS)
 endif
 
 ifndef LDO
@@ -1750,11 +1773,13 @@ else
 endif
 
 %.service: %.service.in
-	$(Q)sed -e 's|\@BINDIR\@|$(BINDIR)|g' $< >$@
+	$(Q)sed -e 's|\@BINDIR\@|$(BINDIR)|g' \
+		-e 's|\@DBUS_INTERFACE\@|$(DBUS_INTERFACE)|g' $< >$@
 	@$(E) "  sed" $<
 
 %@.service: %.service.arg.in
-	$(Q)sed -e 's|\@BINDIR\@|$(BINDIR)|g' $< >$@
+	$(Q)sed -e 's|\@BINDIR\@|$(BINDIR)|g' \
+		-e 's|\@DBUS_INTERFACE\@|$(DBUS_INTERFACE)|g' $< >$@
 	@$(E) "  sed" $<
 
 wpa_supplicant.exe: wpa_supplicant

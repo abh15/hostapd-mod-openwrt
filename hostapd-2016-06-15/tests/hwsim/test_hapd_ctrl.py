@@ -5,6 +5,7 @@
 # See README for more details.
 
 import hostapd
+import hwsim_utils
 from utils import skip_with_fips
 
 def test_hapd_ctrl_status(dev, apdev):
@@ -12,7 +13,7 @@ def test_hapd_ctrl_status(dev, apdev):
     ssid = "hapd-ctrl"
     bssid = apdev[0]['bssid']
     params = hostapd.wpa2_params(ssid=ssid, passphrase="12345678")
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     status = hapd.get_status()
     driver = hapd.get_driver_status()
 
@@ -37,7 +38,7 @@ def test_hapd_ctrl_p2p_manager(dev, apdev):
     params = hostapd.wpa2_params(ssid=ssid, passphrase=passphrase)
     params['manage_p2p'] = '1'
     params['allow_cross_connection'] = '0'
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     dev[0].connect(ssid, psk=passphrase, scan_freq="2412")
     addr = dev[0].own_addr()
     if "OK" not in hapd.request("DEAUTHENTICATE " + addr + " p2p=2"):
@@ -55,7 +56,7 @@ def test_hapd_ctrl_sta(dev, apdev):
     ssid = "hapd-ctrl-sta"
     passphrase = "12345678"
     params = hostapd.wpa2_params(ssid=ssid, passphrase=passphrase)
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     dev[0].connect(ssid, psk=passphrase, scan_freq="2412")
     addr = dev[0].own_addr()
     if "FAIL" in hapd.request("STA " + addr):
@@ -77,7 +78,7 @@ def test_hapd_ctrl_disconnect(dev, apdev):
     ssid = "hapd-ctrl"
     passphrase = "12345678"
     params = hostapd.wpa2_params(ssid=ssid, passphrase=passphrase)
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     dev[0].connect(ssid, psk=passphrase, scan_freq="2412")
     addr = dev[0].p2p_dev_addr()
 
@@ -101,7 +102,7 @@ def test_hapd_ctrl_chan_switch(dev, apdev):
     """hostapd and CHAN_SWITCH ctrl_iface command"""
     ssid = "hapd-ctrl"
     params = { "ssid": ssid }
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     if "FAIL" not in hapd.request("CHAN_SWITCH "):
         raise Exception("Unexpected CHAN_SWITCH success")
     if "FAIL" not in hapd.request("CHAN_SWITCH qwerty 2422"):
@@ -115,7 +116,7 @@ def test_hapd_ctrl_level(dev, apdev):
     """hostapd and LEVEL ctrl_iface command"""
     ssid = "hapd-ctrl"
     params = { "ssid": ssid }
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     if "FAIL" not in hapd.request("LEVEL 0"):
         raise Exception("Unexpected LEVEL success on non-monitor interface")
 
@@ -123,7 +124,7 @@ def test_hapd_ctrl_new_sta(dev, apdev):
     """hostapd and NEW_STA ctrl_iface command"""
     ssid = "hapd-ctrl"
     params = { "ssid": ssid }
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     if "FAIL" not in hapd.request("NEW_STA 00:11:22:33:44"):
         raise Exception("Unexpected NEW_STA success")
     if "OK" not in hapd.request("NEW_STA 00:11:22:33:44:55"):
@@ -135,7 +136,7 @@ def test_hapd_ctrl_get(dev, apdev):
     """hostapd and GET ctrl_iface command"""
     ssid = "hapd-ctrl"
     params = { "ssid": ssid }
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     if "FAIL" not in hapd.request("GET foo"):
         raise Exception("Unexpected GET success")
     if "FAIL" in hapd.request("GET version"):
@@ -145,7 +146,7 @@ def test_hapd_ctrl_unknown(dev, apdev):
     """hostapd and unknown ctrl_iface command"""
     ssid = "hapd-ctrl"
     params = { "ssid": ssid }
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     if "UNKNOWN COMMAND" not in hapd.request("FOO"):
         raise Exception("Unexpected response")
 
@@ -153,7 +154,7 @@ def test_hapd_ctrl_hs20_wnm_notif(dev, apdev):
     """hostapd and HS20_WNM_NOTIF ctrl_iface command"""
     ssid = "hapd-ctrl"
     params = { "ssid": ssid }
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     if "FAIL" not in hapd.request("HS20_WNM_NOTIF 00:11:22:33:44 http://example.com/"):
         raise Exception("Unexpected HS20_WNM_NOTIF success")
     if "FAIL" not in hapd.request("HS20_WNM_NOTIF 00:11:22:33:44:55http://example.com/"):
@@ -163,7 +164,7 @@ def test_hapd_ctrl_hs20_deauth_req(dev, apdev):
     """hostapd and HS20_DEAUTH_REQ ctrl_iface command"""
     ssid = "hapd-ctrl"
     params = { "ssid": ssid }
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     if "FAIL" not in hapd.request("HS20_DEAUTH_REQ 00:11:22:33:44 1 120 http://example.com/"):
         raise Exception("Unexpected HS20_DEAUTH_REQ success")
     if "FAIL" not in hapd.request("HS20_DEAUTH_REQ 00:11:22:33:44:55"):
@@ -175,7 +176,7 @@ def test_hapd_ctrl_disassoc_imminent(dev, apdev):
     """hostapd and DISASSOC_IMMINENT ctrl_iface command"""
     ssid = "hapd-ctrl"
     params = { "ssid": ssid }
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     if "FAIL" not in hapd.request("DISASSOC_IMMINENT 00:11:22:33:44"):
         raise Exception("Unexpected DISASSOC_IMMINENT success")
     if "FAIL" not in hapd.request("DISASSOC_IMMINENT 00:11:22:33:44:55"):
@@ -194,7 +195,7 @@ def test_hapd_ctrl_ess_disassoc(dev, apdev):
     """hostapd and ESS_DISASSOC ctrl_iface command"""
     ssid = "hapd-ctrl"
     params = { "ssid": ssid }
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     if "FAIL" not in hapd.request("ESS_DISASSOC 00:11:22:33:44"):
         raise Exception("Unexpected ESS_DISASSOCT success")
     if "FAIL" not in hapd.request("ESS_DISASSOC 00:11:22:33:44:55"):
@@ -217,7 +218,7 @@ def test_hapd_ctrl_set_deny_mac_file(dev, apdev):
     """hostapd and SET deny_mac_file ctrl_iface command"""
     ssid = "hapd-ctrl"
     params = { "ssid": ssid }
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     dev[0].connect(ssid, key_mgmt="NONE", scan_freq="2412")
     dev[1].connect(ssid, key_mgmt="NONE", scan_freq="2412")
     if "OK" not in hapd.request("SET deny_mac_file hostapd.macaddr"):
@@ -231,7 +232,7 @@ def test_hapd_ctrl_set_accept_mac_file(dev, apdev):
     """hostapd and SET accept_mac_file ctrl_iface command"""
     ssid = "hapd-ctrl"
     params = { "ssid": ssid }
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     dev[0].connect(ssid, key_mgmt="NONE", scan_freq="2412")
     dev[1].connect(ssid, key_mgmt="NONE", scan_freq="2412")
     hapd.request("SET macaddr_acl 1")
@@ -246,7 +247,7 @@ def test_hapd_ctrl_set_error_cases(dev, apdev):
     """hostapd and SET error cases"""
     ssid = "hapd-ctrl"
     params = { "ssid": ssid }
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     errors = [ "wpa_key_mgmt FOO",
                "wpa_key_mgmt WPA-PSK   \t  FOO",
                "wpa_key_mgmt    \t  ",
@@ -391,6 +392,8 @@ def test_hapd_ctrl_set_error_cases(dev, apdev):
                "bss_load_test 12:80",
                "vendor_elements 0",
                "vendor_elements 0q",
+               "assocresp_elements 0",
+               "assocresp_elements 0q",
                "local_pwr_constraint -1",
                "local_pwr_constraint 256",
                "wmm_ac_bk_cwmin -1",
@@ -442,8 +445,8 @@ def test_hapd_ctrl_global(dev, apdev):
     ssid = "hapd-ctrl"
     params = { "ssid": ssid }
     ifname = apdev[0]['ifname']
-    hapd = hostapd.add_ap(ifname, params)
-    hapd_global = hostapd.HostapdGlobal()
+    hapd = hostapd.add_ap(apdev[0], params)
+    hapd_global = hostapd.HostapdGlobal(apdev[0])
     res = hapd_global.request("IFNAME=" + ifname + " PING")
     if "PONG" not in res:
             raise Exception("Could not ping hostapd interface " + ifname + " via global control interface")
@@ -465,11 +468,11 @@ def test_hapd_dup_network_global_wpa2(dev, apdev):
 
     src_params = hostapd.wpa2_params(ssid=src_ssid, passphrase=passphrase)
     src_ifname = apdev[0]['ifname']
-    src_hapd = hostapd.add_ap(src_ifname, src_params)
+    src_hapd = hostapd.add_ap(apdev[0], src_params)
 
     dst_params = { "ssid": dst_ssid }
     dst_ifname = apdev[1]['ifname']
-    dst_hapd = hostapd.add_ap(dst_ifname, dst_params, no_enable=True)
+    dst_hapd = hostapd.add_ap(apdev[1], dst_params, no_enable=True)
 
     hapd_global = hostapd.HostapdGlobal()
 
@@ -494,11 +497,11 @@ def test_hapd_dup_network_global_wpa(dev, apdev):
     src_params = hostapd.wpa_params(ssid=src_ssid)
     src_params['wpa_psk'] = psk
     src_ifname = apdev[0]['ifname']
-    src_hapd = hostapd.add_ap(src_ifname, src_params)
+    src_hapd = hostapd.add_ap(apdev[0], src_params)
 
     dst_params = { "ssid": dst_ssid }
     dst_ifname = apdev[1]['ifname']
-    dst_hapd = hostapd.add_ap(dst_ifname, dst_params, no_enable=True)
+    dst_hapd = hostapd.add_ap(apdev[1], dst_params, no_enable=True)
 
     hapd_global = hostapd.HostapdGlobal()
 
@@ -515,7 +518,7 @@ def test_hapd_dup_network_global_wpa(dev, apdev):
 
 def test_hapd_ctrl_log_level(dev, apdev):
     """hostapd ctrl_iface LOG_LEVEL"""
-    hapd = hostapd.add_ap(apdev[0]['ifname'], { "ssid": "open" })
+    hapd = hostapd.add_ap(apdev[0], { "ssid": "open" })
     level = hapd.request("LOG_LEVEL")
     if "Current level: MSGDUMP" not in level:
         raise Exception("Unexpected debug level(1): " + level)
@@ -555,3 +558,41 @@ def test_hapd_ctrl_log_level(dev, apdev):
         raise Exception("Unexpected debug level(3): " + level)
     if "Timestamp: 1" not in level:
         raise Exception("Unexpected timestamp(3): " + level)
+
+def test_hapd_ctrl_disconnect_no_tx(dev, apdev):
+    """hostapd disconnecting STA without transmitting Deauth/Disassoc"""
+    ssid = "hapd-test"
+    passphrase = "12345678"
+    params = hostapd.wpa2_params(ssid=ssid, passphrase=passphrase)
+    hapd = hostapd.add_ap(apdev[0], params)
+    bssid = apdev[0]['bssid']
+    dev[0].connect(ssid, psk=passphrase, scan_freq="2412")
+    addr0 = dev[0].own_addr()
+    dev[1].connect(ssid, psk=passphrase, scan_freq="2412")
+    addr1 = dev[1].own_addr()
+
+    # Disconnect the STA without sending out Deauthentication frame
+    if "OK" not in hapd.request("DEAUTHENTICATE " + addr0 + " tx=0"):
+        raise Exception("DEAUTHENTICATE command failed")
+    # Force disconnection due to AP receiving a frame from not-asssociated STA
+    dev[0].request("DATA_TEST_CONFIG 1")
+    dev[0].request("DATA_TEST_TX " + bssid + " " + addr0)
+    ev = dev[0].wait_event(["CTRL-EVENT-DISCONNECTED"], timeout=5)
+    dev[0].request("DATA_TEST_CONFIG 0")
+    if ev is None:
+        raise Exception("Disconnection event not seen after TX attempt")
+    if "reason=7" not in ev:
+        raise Exception("Unexpected disconnection reason: " + ev)
+
+    # Disconnect the STA without sending out Disassociation frame
+    if "OK" not in hapd.request("DISASSOCIATE " + addr1 + " tx=0"):
+        raise Exception("DISASSOCIATE command failed")
+    # Force disconnection due to AP receiving a frame from not-asssociated STA
+    dev[1].request("DATA_TEST_CONFIG 1")
+    dev[1].request("DATA_TEST_TX " + bssid + " " + addr1)
+    ev = dev[1].wait_event(["CTRL-EVENT-DISCONNECTED"], timeout=5)
+    dev[1].request("DATA_TEST_CONFIG 0")
+    if ev is None:
+        raise Exception("Disconnection event not seen after TX attempt")
+    if "reason=7" not in ev:
+        raise Exception("Unexpected disconnection reason: " + ev)

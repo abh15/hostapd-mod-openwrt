@@ -40,6 +40,7 @@
 #define DEFAULT_CERT_IN_CB 1
 #define DEFAULT_P2P_GO_CTWINDOW 0
 #define DEFAULT_WPA_RSC_RELAXATION 1
+#define DEFAULT_MBO_CELL_CAPA MBO_CELL_CAPA_NOT_SUPPORTED
 
 #include "config_ssid.h"
 #include "wps/wps.h"
@@ -1038,7 +1039,8 @@ struct wpa_config {
 	 *
 	 * By default, PMF is disabled unless enabled by the per-network
 	 * ieee80211w=1 or ieee80211w=2 parameter. pmf=1/2 can be used to change
-	 * this default behavior.
+	 * this default behavior for RSN network (this is not applicable for
+	 * non-RSN cases).
 	 */
 	enum mfp_options pmf;
 
@@ -1275,6 +1277,31 @@ struct wpa_config {
 	 * format: <interval:iterations> <interval2:iterations2> ... <interval>
 	 */
 	 char *sched_scan_plans;
+
+#ifdef CONFIG_MBO
+	/**
+	 * non_pref_chan - Non-preferred channels list, separated by spaces.
+	 *
+	 * format: op_class:chan:preference:reason<:detail>
+	 * Detail is optional.
+	 */
+	char *non_pref_chan;
+
+	/**
+	 * mbo_cell_capa - Cellular capabilities for MBO
+	 */
+	enum mbo_cellular_capa mbo_cell_capa;
+#endif /* CONFIG_MBO */
+
+	/**
+	 * gas_address3 - GAS Address3 field behavior
+	 *
+	 * Values:
+	 * 0 - P2P specification (Address3 = AP BSSID)
+	 * 1 = IEEE 802.11 standard compliant (Address3 = Wildcard BSSID when
+	 *	sent to not-associated AP; if associated, AP BSSID)
+	 */
+	int gas_address3;
 };
 
 

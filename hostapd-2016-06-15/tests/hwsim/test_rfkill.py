@@ -30,7 +30,7 @@ def test_rfkill_open(dev, apdev):
     """rfkill block/unblock during open mode connection"""
     rfk = get_rfkill(dev[0])
 
-    hapd = hostapd.add_ap(apdev[0]['ifname'], { "ssid": "open" })
+    hapd = hostapd.add_ap(apdev[0], { "ssid": "open" })
     dev[0].connect("open", key_mgmt="NONE", scan_freq="2412")
     try:
         logger.info("rfkill block")
@@ -62,7 +62,7 @@ def test_rfkill_wpa2_psk(dev, apdev):
     ssid = "test-wpa2-psk"
     passphrase = 'qwertyuiop'
     params = hostapd.wpa2_params(ssid=ssid, passphrase=passphrase)
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     dev[0].connect(ssid, psk=passphrase, scan_freq="2412")
     try:
         logger.info("rfkill block")
@@ -135,11 +135,11 @@ def _test_rfkill_p2p_discovery(dev0, dev1):
             if dev0.get_status_field("wpa_state") == "INTERFACE_DISABLED" and dev1.get_status_field("wpa_state") == "INTERFACE_DISABLED":
                 break
 
-	if "OK" in dev0.p2p_listen():
-	    raise Exception("P2P Listen success although in rfkill")
+        if "OK" in dev0.p2p_listen():
+            raise Exception("P2P Listen success although in rfkill")
 
-	if "OK" in dev1.p2p_find():
-	    raise Exception("P2P Find success although in rfkill")
+        if "OK" in dev1.p2p_find():
+            raise Exception("P2P Find success although in rfkill")
 
         dev0.dump_monitor()
         dev1.dump_monitor()
@@ -154,11 +154,11 @@ def _test_rfkill_p2p_discovery(dev0, dev1):
             if dev0.get_status_field("wpa_state") != "INTERFACE_DISABLED" and dev1.get_status_field("wpa_state") != "INTERFACE_DISABLED":
                 break
 
-	if not "OK" in dev0.p2p_listen():
-	    raise Exception("P2P Listen failed after unblocking rfkill")
+        if not "OK" in dev0.p2p_listen():
+            raise Exception("P2P Listen failed after unblocking rfkill")
 
-	if not dev1.discover_peer(addr0, social=True):
-	    raise Exception("Failed to discover peer after unblocking rfkill")
+        if not dev1.discover_peer(addr0, social=True):
+            raise Exception("Failed to discover peer after unblocking rfkill")
 
     finally:
         rfk0.unblock()
@@ -177,12 +177,12 @@ def test_rfkill_p2p_discovery_p2p_dev(dev, apdev):
     with HWSimRadio(use_p2p_device=True) as (radio, iface):
         wpas = WpaSupplicant(global_iface='/tmp/wpas-wlan5')
         wpas.interface_add(iface)
-	_test_rfkill_p2p_discovery(dev[0], wpas)
-	_test_rfkill_p2p_discovery(wpas, dev[1])
+        _test_rfkill_p2p_discovery(dev[0], wpas)
+        _test_rfkill_p2p_discovery(wpas, dev[1])
 
 def test_rfkill_hostapd(dev, apdev):
     """rfkill block/unblock during and prior to hostapd operations"""
-    hapd = hostapd.add_ap(apdev[0]['ifname'], { "ssid": "open" })
+    hapd = hostapd.add_ap(apdev[0], { "ssid": "open" })
 
     rfk = get_rfkill(hapd)
 
@@ -207,11 +207,11 @@ def test_rfkill_hostapd(dev, apdev):
         dev[0].request("DISCONNECT")
         hapd.disable()
 
-        hglobal = HostapdGlobal()
+        hglobal = HostapdGlobal(apdev[0])
         hglobal.flush()
         hglobal.remove(apdev[0]['ifname'])
 
-        hapd = hostapd.add_ap(apdev[0]['ifname'], { "ssid": "open2" },
+        hapd = hostapd.add_ap(apdev[0], { "ssid": "open2" },
                               no_enable=True)
         if "FAIL" not in hapd.request("ENABLE"):
             raise Exception("ENABLE succeeded unexpectedly (rfkill)")

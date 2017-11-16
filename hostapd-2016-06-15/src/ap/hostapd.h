@@ -41,7 +41,7 @@ struct hapd_interfaces {
 
 	size_t count;
 	int global_ctrl_sock;
-	struct wpa_ctrl_dst *global_ctrl_dst;
+	struct dl_list global_ctrl_dst;
 	char *global_iface_path;
 	char *global_iface_name;
 #ifndef CONFIG_NATIVE_WINDOWS
@@ -53,6 +53,7 @@ struct hapd_interfaces {
 #ifndef CONFIG_NO_VLAN
 	struct dynamic_iface *vlan_priv;
 #endif /* CONFIG_NO_VLAN */
+	int eloop_initialized;
 };
 
 enum hostapd_chan_status {
@@ -99,6 +100,16 @@ struct wps_stat {
 	u8 peer_addr[ETH_ALEN];
 };
 
+struct hostapd_neighbor_entry {
+	struct dl_list list;
+	u8 bssid[ETH_ALEN];
+	struct wpa_ssid_value ssid;
+	struct wpabuf *nr;
+	struct wpabuf *lci;
+	struct wpabuf *civic;
+	/* LCI update time */
+	struct os_time lci_date;
+};
 
 /**
  * struct hostapd_data - hostapd per-BSS data structure
@@ -138,7 +149,7 @@ struct hostapd_data {
 	void *msg_ctx_parent; /* parent interface ctx for wpa_msg() calls */
 
 	struct radius_client_data *radius;
-	u32 acct_session_id_hi, acct_session_id_lo;
+	u64 acct_session_id;
 	struct radius_das_data *radius_das;
 
 	struct iapp_data *iapp;
@@ -155,7 +166,7 @@ struct hostapd_data {
 	int tkip_countermeasures;
 
 	int ctrl_sock;
-	struct wpa_ctrl_dst *ctrl_dst;
+	struct dl_list ctrl_dst;
 
 	void *ssl_ctx;
 	void *eap_sim_db_priv;
@@ -258,9 +269,11 @@ struct hostapd_data {
 #ifdef CONFIG_MESH
 	int num_plinks;
 	int max_plinks;
-	void (*mesh_sta_free_cb)(struct sta_info *sta);
+	void (*mesh_sta_free_cb)(struct hostapd_data *hapd,
+				 struct sta_info *sta);
 	struct wpabuf *mesh_pending_auth;
 	struct os_reltime mesh_pending_auth_time;
+	u8 mesh_required_peer[ETH_ALEN];
 #endif /* CONFIG_MESH */
 
 #ifdef CONFIG_SQLITE
@@ -280,6 +293,17 @@ struct hostapd_data {
 
 	struct l2_packet_data *l2_test;
 #endif /* CONFIG_TESTING_OPTIONS */
+
+#ifdef CONFIG_MBO
+	unsigned int mbo_assoc_disallow;
+#endif /* CONFIG_MBO */
+
+	struct dl_list nr_db;
+
+	u8 lci_req_token;
+	u8 range_req_token;
+	unsigned int lci_req_active:1;
+	unsigned int range_req_active:1;
 };
 
 

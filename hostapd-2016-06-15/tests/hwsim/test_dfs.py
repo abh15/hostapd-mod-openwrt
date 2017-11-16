@@ -26,16 +26,11 @@ def wait_dfs_event(hapd, event, timeout):
     return ev
 
 def start_dfs_ap(ap, allow_failure=False, ssid="dfs", ht=True, ht40=False,
-                 ht40minus=False, vht80=False, vht20=False, chanlist=None):
+                 ht40minus=False, vht80=False, vht20=False, chanlist=None,
+                 channel=None):
     ifname = ap['ifname']
     logger.info("Starting AP " + ifname + " on DFS channel")
-    hapd_global = hostapd.HostapdGlobal()
-    hapd_global.remove(ifname)
-    hapd_global.add(ifname)
-    hapd = hostapd.Hostapd(ifname)
-    if not hapd.ping():
-        raise Exception("Could not ping hostapd")
-    hapd.set_defaults()
+    hapd = hostapd.add_ap(ap, {}, no_enable=True)
     hapd.set("ssid", ssid)
     hapd.set("country_code", "FI")
     hapd.set("ieee80211d", "1")
@@ -59,6 +54,8 @@ def start_dfs_ap(ap, allow_failure=False, ssid="dfs", ht=True, ht40=False,
         hapd.set("vht_oper_centr_freq_seg0_idx", "0")
     if chanlist:
         hapd.set("chanlist", chanlist)
+    if channel:
+        hapd.set("channel", str(channel))
     hapd.enable()
 
     ev = wait_dfs_event(hapd, "DFS-CAC-START", 5)
@@ -219,7 +216,7 @@ def test_dfs_radar(dev, apdev):
 def test_dfs_radar_on_non_dfs_channel(dev, apdev):
     """DFS radar detection test code on non-DFS channel"""
     params = { "ssid": "radar" }
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
 
     hapd.request("RADAR DETECTED freq=5260 ht_enabled=1 chan_width=1")
     hapd.request("RADAR DETECTED freq=2412 ht_enabled=1 chan_width=1")
@@ -394,6 +391,42 @@ def test_dfs_radar_ht40minus(dev, apdev):
         if "AP-ENABLED" not in ev:
             raise Exception("Unexpected DFS event")
         dev[0].connect("dfs", key_mgmt="NONE")
+    finally:
+        dev[0].request("DISCONNECT")
+        if hapd:
+            hapd.request("DISABLE")
+        subprocess.call(['iw', 'reg', 'set', '00'])
+        dev[0].flush_scan_cache()
+
+def test_dfs_ht40_minus(dev, apdev, params):
+    """DFS CAC functionality on channel 104 HT40- [long]"""
+    if not params['long']:
+        raise HwsimSkip("Skip test case with long duration due to --long not specified")
+    try:
+        hapd = None
+        hapd = start_dfs_ap(apdev[0], allow_failure=True, ht40minus=True,
+                            channel=104)
+
+        ev = wait_dfs_event(hapd, "DFS-CAC-COMPLETED", 70)
+        if "success=1" not in ev:
+            raise Exception("CAC failed")
+        if "freq=5520" not in ev:
+            raise Exception("Unexpected DFS freq result")
+
+        ev = hapd.wait_event(["AP-ENABLED"], timeout=5)
+        if not ev:
+            raise Exception("AP setup timed out")
+
+        state = hapd.get_status_field("state")
+        if state != "ENABLED":
+            raise Exception("Unexpected interface state")
+
+        freq = hapd.get_status_field("freq")
+        if freq != "5520":
+            raise Exception("Unexpected frequency")
+
+        dev[0].connect("dfs", key_mgmt="NONE", scan_freq="5520")
+        hwsim_utils.test_connectivity(dev[0], hapd)
     finally:
         dev[0].request("DISCONNECT")
         if hapd:

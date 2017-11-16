@@ -1612,7 +1612,7 @@ static const char *network_fields[] = {
 #ifdef CONFIG_HS20
 	"update_identifier",
 #endif /* CONFIG_HS20 */
-	"mac_addr"
+	"mac_addr", "pbss", "wps_disabled"
 };
 
 
@@ -2042,6 +2042,20 @@ static int wpa_cli_cmd_mesh_group_remove(struct wpa_ctrl *ctrl, int argc,
 	return wpa_cli_cmd(ctrl, "MESH_GROUP_REMOVE", 1, argc, argv);
 }
 
+
+static int wpa_cli_cmd_mesh_peer_remove(struct wpa_ctrl *ctrl, int argc,
+					char *argv[])
+{
+	return wpa_cli_cmd(ctrl, "MESH_PEER_REMOVE", 1, argc, argv);
+}
+
+
+static int wpa_cli_cmd_mesh_peer_add(struct wpa_ctrl *ctrl, int argc,
+				     char *argv[])
+{
+	return wpa_cli_cmd(ctrl, "MESH_PEER_ADD", 1, argc, argv);
+}
+
 #endif /* CONFIG_MESH */
 
 
@@ -2158,6 +2172,13 @@ static int wpa_cli_cmd_p2p_group_add(struct wpa_ctrl *ctrl, int argc,
 					char *argv[])
 {
 	return wpa_cli_cmd(ctrl, "P2P_GROUP_ADD", 0, argc, argv);
+}
+
+
+static int wpa_cli_cmd_p2p_group_member(struct wpa_ctrl *ctrl, int argc,
+					char *argv[])
+{
+	return wpa_cli_cmd(ctrl, "P2P_GROUP_MEMBER", 1, argc, argv);
 }
 
 
@@ -3210,6 +3231,12 @@ static const struct wpa_cli_cmd wpa_cli_commands[] = {
 	{ "mesh_group_remove", wpa_cli_cmd_mesh_group_remove, NULL,
 	  cli_cmd_flag_none,
 	  "<ifname> = Remove mesh group interface" },
+	{ "mesh_peer_remove", wpa_cli_cmd_mesh_peer_remove, NULL,
+	  cli_cmd_flag_none,
+	  "<addr> = Remove a mesh peer" },
+	{ "mesh_peer_add", wpa_cli_cmd_mesh_peer_add, NULL,
+	  cli_cmd_flag_none,
+	  "<addr> [duration=<seconds>] = Add a mesh peer" },
 #endif /* CONFIG_MESH */
 #ifdef CONFIG_P2P
 	{ "p2p_find", wpa_cli_cmd_p2p_find, wpa_cli_complete_p2p_find,
@@ -3233,6 +3260,9 @@ static const struct wpa_cli_cmd wpa_cli_commands[] = {
 	  "<ifname> = remove P2P group interface (terminate group if GO)" },
 	{ "p2p_group_add", wpa_cli_cmd_p2p_group_add, NULL, cli_cmd_flag_none,
 	  "[ht40] = add a new P2P group (local end as GO)" },
+	{ "p2p_group_member", wpa_cli_cmd_p2p_group_member, NULL,
+	  cli_cmd_flag_none,
+	  "<dev_addr> = Get peer interface address on local GO using peer Device Address" },
 	{ "p2p_prov_disc", wpa_cli_cmd_p2p_prov_disc,
 	  wpa_cli_complete_p2p_peer, cli_cmd_flag_none,
 	  "<addr> <method> = request provisioning discovery" },
@@ -3418,7 +3448,7 @@ static const struct wpa_cli_cmd wpa_cli_commands[] = {
 	{ "wnm_sleep", wpa_cli_cmd_wnm_sleep, NULL, cli_cmd_flag_none,
 	  "<enter/exit> [interval=#] = enter/exit WNM-Sleep mode" },
 	{ "wnm_bss_query", wpa_cli_cmd_wnm_bss_query, NULL, cli_cmd_flag_none,
-	  "<query reason> = Send BSS Transition Management Query" },
+	  "<query reason> [list] = Send BSS Transition Management Query" },
 #endif /* CONFIG_WNM */
 	{ "raw", wpa_cli_cmd_raw, NULL, cli_cmd_flag_sensitive,
 	  "<params..> = Sent unprocessed command" },
@@ -3435,8 +3465,7 @@ static const struct wpa_cli_cmd wpa_cli_commands[] = {
 	},
 	{ "neighbor_rep_request",
 	  wpa_cli_cmd_neighbor_rep_request, NULL, cli_cmd_flag_none,
-	  "[ssid=<SSID>] = Trigger request to AP for neighboring AP report "
-	  "(with optional given SSID, default: current SSID)"
+	  "[ssid=<SSID>] [lci] [civic] = Trigger request to AP for neighboring AP report (with optional given SSID in hex or enclosed in double quotes, default: current SSID; with optional LCI and location civic request)"
 	},
 	{ "erp_flush", wpa_cli_cmd_erp_flush, NULL, cli_cmd_flag_none,
 	  "= flush ERP keys" },
@@ -3659,6 +3688,10 @@ static int wpa_cli_exec(const char *program, const char *arg1,
 	size_t len;
 	int res;
 
+	/* If no interface is specified, set the global */
+	if (!arg1)
+		arg1 = "global";
+
 	len = os_strlen(arg1) + os_strlen(arg2) + 2;
 	arg = os_malloc(len);
 	if (arg == NULL)
@@ -3744,6 +3777,10 @@ static void wpa_cli_action_process(const char *msg)
 			wpa_cli_connected = 0;
 			wpa_cli_exec(action_file, ifname, "DISCONNECTED");
 		}
+	} else if (str_match(pos, AP_EVENT_ENABLED)) {
+		wpa_cli_exec(action_file, ctrl_ifname, pos);
+	} else if (str_match(pos, AP_EVENT_DISABLED)) {
+		wpa_cli_exec(action_file, ctrl_ifname, pos);
 	} else if (str_match(pos, MESH_GROUP_STARTED)) {
 		wpa_cli_exec(action_file, ctrl_ifname, pos);
 	} else if (str_match(pos, MESH_GROUP_REMOVED)) {
@@ -4152,7 +4189,7 @@ static void try_connection(void *eloop_ctx, void *timeout_ctx)
 	if (ctrl_ifname == NULL)
 		ctrl_ifname = wpa_cli_get_default_ifname();
 
-	if (!wpa_cli_open_connection(ctrl_ifname, 1) == 0) {
+	if (wpa_cli_open_connection(ctrl_ifname, 1)) {
 		if (!warning_displayed) {
 			printf("Could not connect to wpa_supplicant: "
 			       "%s - re-trying\n",
@@ -4441,7 +4478,7 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		if (daemonize && os_daemonize(pid_file))
+		if (daemonize && os_daemonize(pid_file) && eloop_sock_requeue())
 			return -1;
 
 		if (action_file)

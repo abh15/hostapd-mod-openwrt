@@ -997,7 +997,7 @@ out:
 		if (p2p_send_action(p2p, freq, sa, p2p->cfg->dev_addr,
 				    p2p->cfg->dev_addr,
 				    wpabuf_head(resp), wpabuf_len(resp),
-				    200) < 0)
+				    50) < 0)
 			p2p_dbg(p2p, "Failed to send Action frame");
 		else
 			p2p->send_action_in_progress = 1;
@@ -1349,6 +1349,9 @@ void p2p_process_prov_disc_resp(struct p2p_data *p2p, const u8 *sa,
 			" with no pending request", MAC2STR(sa));
 		p2p_parse_free(&msg);
 		return;
+	} else if (msg.wfd_subelems) {
+		wpabuf_free(dev->info.wfd_subelems);
+		dev->info.wfd_subelems = wpabuf_dup(msg.wfd_subelems);
 	}
 
 	if (dev->dialog_token != msg.dialog_token) {

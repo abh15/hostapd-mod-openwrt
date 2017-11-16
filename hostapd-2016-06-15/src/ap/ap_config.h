@@ -17,6 +17,7 @@
 #include "common/ieee802_11_common.h"
 #include "wps/wps.h"
 #include "fst/fst.h"
+#include "vlan.h"
 
 /**
  * mesh_conf - local MBSS state and settings
@@ -53,7 +54,7 @@ typedef u8 macaddr[ETH_ALEN];
 
 struct mac_acl_entry {
 	macaddr addr;
-	int vlan_id;
+	struct vlan_description vlan_id;
 };
 
 struct hostapd_radius_servers;
@@ -103,6 +104,7 @@ struct hostapd_ssid {
 #define DYNAMIC_VLAN_NAMING_WITH_DEVICE 1
 #define DYNAMIC_VLAN_NAMING_END 2
 	int vlan_naming;
+	int per_sta_vif;
 #ifdef CONFIG_FULL_DYNAMIC_VLAN
 	char *vlan_tagged_interface;
 #endif /* CONFIG_FULL_DYNAMIC_VLAN */
@@ -114,6 +116,7 @@ struct hostapd_ssid {
 struct hostapd_vlan {
 	struct hostapd_vlan *next;
 	int vlan_id; /* VLAN ID or -1 (VLAN_ID_WILDCARD) for wildcard entry */
+	struct vlan_description vlan_desc;
 	char ifname[IFNAMSIZ + 1];
 	int configured;
 	int dynamic_vlan;
@@ -125,9 +128,14 @@ struct hostapd_vlan {
 };
 
 #define PMK_LEN 32
+#define MIN_PASSPHRASE_LEN 8
+#define MAX_PASSPHRASE_LEN 63
 struct hostapd_sta_wpa_psk_short {
 	struct hostapd_sta_wpa_psk_short *next;
+	unsigned int is_passphrase:1;
 	u8 psk[PMK_LEN];
+	char passphrase[MAX_PASSPHRASE_LEN + 1];
+	int ref; /* (number of references held) - 1 */
 };
 
 struct hostapd_wpa_psk {
@@ -496,6 +504,7 @@ struct hostapd_bss_config {
 
 	u16 gas_comeback_delay;
 	int gas_frag_limit;
+	int gas_address3;
 
 	u8 qos_map_set[16 + 2 * 21];
 	unsigned int qos_map_set_len;
@@ -549,6 +558,7 @@ struct hostapd_bss_config {
 #endif /* CONFIG_RADIUS_TEST */
 
 	struct wpabuf *vendor_elements;
+	struct wpabuf *assocresp_elements;
 
 	unsigned int sae_anti_clogging_threshold;
 	int *sae_groups;
@@ -564,12 +574,18 @@ struct hostapd_bss_config {
 #define MESH_ENABLED BIT(0)
 	int mesh;
 
-	int radio_measurements;
+	u8 radio_measurements[RRM_CAPABILITIES_IE_LEN];
 
 	int vendor_vht;
 
 	char *no_probe_resp_if_seen_on;
 	char *no_auth_if_seen_on;
+
+	int pbss;
+
+#ifdef CONFIG_MBO
+	int mbo_enabled;
+#endif /* CONFIG_MBO */
 };
 
 
@@ -651,6 +667,9 @@ struct hostapd_config {
 	u8 vht_oper_centr_freq_seg0_idx;
 	u8 vht_oper_centr_freq_seg1_idx;
 
+	/* Use driver-generated interface addresses when adding multiple BSSs */
+	u8 use_driver_iface_addr;
+
 #ifdef CONFIG_FST
 	struct fst_iface_cfg fst_cfg;
 #endif /* CONFIG_FST */
@@ -676,11 +695,13 @@ struct hostapd_config {
 	} *acs_chan_bias;
 	unsigned int num_acs_chan_bias;
 #endif /* CONFIG_ACS */
+
+	struct wpabuf *lci;
+	struct wpabuf *civic;
 };
 
 
 int hostapd_mac_comp(const void *a, const void *b);
-int hostapd_mac_comp_empty(const void *a);
 struct hostapd_config * hostapd_config_defaults(void);
 void hostapd_config_defaults_bss(struct hostapd_bss_config *bss);
 void hostapd_config_free_eap_user(struct hostapd_eap_user *user);
@@ -688,13 +709,14 @@ void hostapd_config_clear_wpa_psk(struct hostapd_wpa_psk **p);
 void hostapd_config_free_bss(struct hostapd_bss_config *conf);
 void hostapd_config_free(struct hostapd_config *conf);
 int hostapd_maclist_found(struct mac_acl_entry *list, int num_entries,
-			  const u8 *addr, int *vlan_id);
+			  const u8 *addr, struct vlan_description *vlan_id);
 int hostapd_rate_found(int *list, int rate);
 const u8 * hostapd_get_psk(const struct hostapd_bss_config *conf,
 			   const u8 *addr, const u8 *p2p_dev_addr,
 			   const u8 *prev_psk);
 int hostapd_setup_wpa_psk(struct hostapd_bss_config *conf);
-int hostapd_vlan_id_valid(struct hostapd_vlan *vlan, int vlan_id);
+int hostapd_vlan_valid(struct hostapd_vlan *vlan,
+		       struct vlan_description *vlan_desc);
 const char * hostapd_get_vlan_id_ifname(struct hostapd_vlan *vlan,
 					int vlan_id);
 struct hostapd_radius_attr *

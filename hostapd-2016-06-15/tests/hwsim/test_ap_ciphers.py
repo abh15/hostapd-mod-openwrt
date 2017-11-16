@@ -22,16 +22,12 @@ def check_cipher(dev, ap, cipher):
                "wpa": "2",
                "wpa_key_mgmt": "WPA-PSK",
                "rsn_pairwise": cipher }
-    hapd = hostapd.add_ap(ap['ifname'], params)
+    hapd = hostapd.add_ap(ap, params)
     dev.connect("test-wpa2-psk", psk="12345678",
                 pairwise=cipher, group=cipher, scan_freq="2412")
     hwsim_utils.test_connectivity(dev, hapd)
 
 def check_group_mgmt_cipher(dev, ap, cipher):
-    wt = Wlantest()
-    wt.flush()
-    wt.add_passphrase("12345678")
-
     if cipher not in dev.get_capability("group_mgmt"):
         raise HwsimSkip("Cipher %s not supported" % cipher)
     params = { "ssid": "test-wpa2-psk-pmf",
@@ -41,7 +37,13 @@ def check_group_mgmt_cipher(dev, ap, cipher):
                "wpa_key_mgmt": "WPA-PSK-SHA256",
                "rsn_pairwise": "CCMP",
                "group_mgmt_cipher": cipher }
-    hapd = hostapd.add_ap(ap['ifname'], params)
+    hapd = hostapd.add_ap(ap, params)
+
+    Wlantest.setup(hapd)
+    wt = Wlantest()
+    wt.flush()
+    wt.add_passphrase("12345678")
+
     dev.connect("test-wpa2-psk-pmf", psk="12345678", ieee80211w="2",
                 key_mgmt="WPA-PSK-SHA256",
                 pairwise="CCMP", group="CCMP", scan_freq="2412")
@@ -78,7 +80,7 @@ def test_ap_cipher_tkip_countermeasures_ap(dev, apdev):
                "wpa": "1",
                "wpa_key_mgmt": "WPA-PSK",
                "wpa_pairwise": "TKIP" }
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
 
     dev[0].connect("tkip-countermeasures", psk="12345678",
                    pairwise="TKIP", group="TKIP", scan_freq="2412")
@@ -108,7 +110,7 @@ def test_ap_cipher_tkip_countermeasures_sta(dev, apdev):
                "wpa": "1",
                "wpa_key_mgmt": "WPA-PSK",
                "wpa_pairwise": "TKIP" }
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
 
     testfile = "/sys/kernel/debug/ieee80211/%s/netdev:%s/tkip_mic_test" % (hapd.get_driver_status_field("phyname"), apdev[0]['ifname'])
     if not os.path.exists(testfile):
@@ -161,7 +163,7 @@ def test_ap_cipher_mixed_wpa_wpa2(dev, apdev):
                "wpa_key_mgmt": "WPA-PSK",
                "rsn_pairwise": "CCMP",
                "wpa_pairwise": "TKIP" }
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     dev[0].connect(ssid, psk=passphrase, proto="WPA2",
                    pairwise="CCMP", group="TKIP", scan_freq="2412")
     status = dev[0].get_status()

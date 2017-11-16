@@ -3298,7 +3298,7 @@ int wpa_auth_pmksa_add(struct wpa_state_machine *sm, const u8 *pmk,
 		pmk_len = PMK_LEN;
 	}
 
-	if (pmksa_cache_auth_add(sm->wpa_auth->pmksa, pmk, pmk_len,
+	if (pmksa_cache_auth_add(sm->wpa_auth->pmksa, pmk, pmk_len, NULL,
 				 sm->PTK.kck, sm->PTK.kck_len,
 				 sm->wpa_auth->addr, sm->addr, session_timeout,
 				 eapol, sm->wpa_key_mgmt))
@@ -3316,7 +3316,7 @@ int wpa_auth_pmksa_add_preauth(struct wpa_authenticator *wpa_auth,
 	if (wpa_auth == NULL)
 		return -1;
 
-	if (pmksa_cache_auth_add(wpa_auth->pmksa, pmk, len,
+	if (pmksa_cache_auth_add(wpa_auth->pmksa, pmk, len, NULL,
 				 NULL, 0,
 				 wpa_auth->addr,
 				 sta_addr, session_timeout, eapol,
@@ -3328,12 +3328,12 @@ int wpa_auth_pmksa_add_preauth(struct wpa_authenticator *wpa_auth,
 
 
 int wpa_auth_pmksa_add_sae(struct wpa_authenticator *wpa_auth, const u8 *addr,
-			   const u8 *pmk)
+			   const u8 *pmk, const u8 *pmkid)
 {
 	if (wpa_auth->conf.disable_pmksa_caching)
 		return -1;
 
-	if (pmksa_cache_auth_add(wpa_auth->pmksa, pmk, PMK_LEN,
+	if (pmksa_cache_auth_add(wpa_auth->pmksa, pmk, PMK_LEN, pmkid,
 				 NULL, 0,
 				 wpa_auth->addr, addr, 0, NULL,
 				 WPA_KEY_MGMT_SAE))
@@ -3356,6 +3356,46 @@ void wpa_auth_pmksa_remove(struct wpa_authenticator *wpa_auth,
 			   MACSTR " based on request", MAC2STR(sta_addr));
 		pmksa_cache_free_entry(wpa_auth->pmksa, pmksa);
 	}
+}
+
+
+int wpa_auth_pmksa_list(struct wpa_authenticator *wpa_auth, char *buf,
+			size_t len)
+{
+	if (!wpa_auth || !wpa_auth->pmksa)
+		return 0;
+	return pmksa_cache_auth_list(wpa_auth->pmksa, buf, len);
+}
+
+
+void wpa_auth_pmksa_flush(struct wpa_authenticator *wpa_auth)
+{
+	if (wpa_auth && wpa_auth->pmksa)
+		pmksa_cache_auth_flush(wpa_auth->pmksa);
+}
+
+
+struct rsn_pmksa_cache_entry *
+wpa_auth_pmksa_get(struct wpa_authenticator *wpa_auth, const u8 *sta_addr)
+{
+	if (!wpa_auth || !wpa_auth->pmksa)
+		return NULL;
+	return pmksa_cache_auth_get(wpa_auth->pmksa, sta_addr, NULL);
+}
+
+
+void wpa_auth_pmksa_set_to_sm(struct rsn_pmksa_cache_entry *pmksa,
+			      struct wpa_state_machine *sm,
+			      struct wpa_authenticator *wpa_auth,
+			      u8 *pmkid, u8 *pmk)
+{
+	if (!sm)
+		return;
+
+	sm->pmksa = pmksa;
+	os_memcpy(pmk, pmksa->pmk, PMK_LEN);
+	os_memcpy(pmkid, pmksa->pmkid, PMKID_LEN);
+	os_memcpy(wpa_auth->dot11RSNAPMKIDUsed, pmksa->pmkid, PMKID_LEN);
 }
 
 

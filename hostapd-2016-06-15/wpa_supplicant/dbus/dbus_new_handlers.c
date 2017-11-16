@@ -2639,12 +2639,14 @@ dbus_bool_t wpas_dbus_getter_capabilities(
 					      &iter_array) ||
 	    !wpa_dbus_dict_string_array_add_element(
 		    &iter_array, "infrastructure") ||
-	    !wpa_dbus_dict_string_array_add_element(
-		    &iter_array, "ad-hoc") ||
+	    (res >= 0 && (capa.flags & WPA_DRIVER_FLAGS_IBSS) &&
+	     !wpa_dbus_dict_string_array_add_element(
+		     &iter_array, "ad-hoc")) ||
 	    (res >= 0 && (capa.flags & WPA_DRIVER_FLAGS_AP) &&
 	     !wpa_dbus_dict_string_array_add_element(
 		     &iter_array, "ap")) ||
 	    (res >= 0 && (capa.flags & WPA_DRIVER_FLAGS_P2P_CAPABLE) &&
+	     !wpa_s->conf->p2p_disabled &&
 	     !wpa_dbus_dict_string_array_add_element(
 		     &iter_array, "p2p")) ||
 	    !wpa_dbus_dict_end_string_array(&iter_dict,
@@ -2853,6 +2855,27 @@ dbus_bool_t wpas_dbus_getter_disconnect_reason(
 
 	return wpas_dbus_simple_property_getter(iter, DBUS_TYPE_INT32,
 						&reason, error);
+}
+
+
+/**
+ * wpas_dbus_getter_assoc_status_code - Get most recent failed assoc status code
+ * @iter: Pointer to incoming dbus message iter
+ * @error: Location to store error on failure
+ * @user_data: Function specific data
+ * Returns: TRUE on success, FALSE on failure
+ *
+ * Getter for "AssocStatusCode" property.
+ */
+dbus_bool_t wpas_dbus_getter_assoc_status_code(
+	const struct wpa_dbus_property_desc *property_desc,
+	DBusMessageIter *iter, DBusError *error, void *user_data)
+{
+	struct wpa_supplicant *wpa_s = user_data;
+	dbus_int32_t status_code = wpa_s->assoc_status_code;
+
+	return wpas_dbus_simple_property_getter(iter, DBUS_TYPE_INT32,
+						&status_code, error);
 }
 
 

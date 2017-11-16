@@ -179,7 +179,7 @@ def test_discovery_ctrl_char_in_devname(dev):
         dev[1].global_request("SET device_name Device B")
 
 def _test_discovery_ctrl_char_in_devname(dev):
-    dev[1].global_request("SET device_name Device\nB")
+    dev[1].global_request("SET device_name Device\tB")
     addr0 = dev[0].p2p_dev_addr()
     addr1 = dev[1].p2p_dev_addr()
     res = dev[0].p2p_start_go(freq=2422)
@@ -319,8 +319,7 @@ def test_discovery_social_plus_one(dev):
     if dev[1].peer_known(go):
         raise Exception("GO found in social-only scan")
 
-def test_discovery_and_interface_disabled(dev):
-    """P2P device discovery with interface getting didabled"""
+def _test_discovery_and_interface_disabled(dev, delay=1):
     try:
         if "OK" not in dev[0].p2p_find():
             raise Exception("Failed to start P2P find")
@@ -328,7 +327,7 @@ def test_discovery_and_interface_disabled(dev):
         if ev is None:
             raise Exception("Scan did not start")
         dev[0].request("DRIVER_EVENT INTERFACE_DISABLED")
-        time.sleep(1)
+        time.sleep(delay)
 
         # verify that P2P_FIND is rejected
         if "FAIL" not in dev[0].p2p_find():
@@ -346,6 +345,11 @@ def test_discovery_and_interface_disabled(dev):
             raise Exception("Peer not found")
     finally:
         dev[0].request("DRIVER_EVENT INTERFACE_ENABLED")
+
+def test_discovery_and_interface_disabled(dev):
+    """P2P device discovery with interface getting disabled"""
+    _test_discovery_and_interface_disabled(dev, delay=1)
+    _test_discovery_and_interface_disabled(dev, delay=5)
 
 def test_discovery_auto(dev):
     """P2P device discovery and provision discovery with auto GO/dev selection"""

@@ -393,8 +393,8 @@ def p2ps_connect_pd(dev0, dev1, ev0, ev1, pin=None, join_extra="", go_ev=None):
 def set_no_group_iface(dev, enable):
     if enable:
         res = dev.get_driver_status()
-	if (int(res['capa.flags'], 0) & 0x20000000):
-	    raise HwsimSkip("P2P Device used. Cannot set enable no_group_iface")
+        if (int(res['capa.flags'], 0) & 0x20000000):
+            raise HwsimSkip("P2P Device used. Cannot set enable no_group_iface")
         dev.global_request("SET p2p_no_group_iface 1")
     else:
         dev.global_request("SET p2p_no_group_iface 0")
@@ -822,9 +822,9 @@ def test_p2ps_connect_p2ps_method_4(dev):
 
     (grp_ifname0, grp_ifname1, ifnames) = p2ps_connect_p2ps_method(dev)
     if not grp_ifname0.startswith('p2p-' + dev[0].ifname + '-'):
-        raise Exception("unexpected dev0 group ifname: " + res0['ifname'])
+        raise Exception("unexpected dev0 group ifname: " + grp_ifname0)
     if not grp_ifname1.startswith('p2p-' + dev[1].ifname + '-'):
-        raise Exception("unexpected dev1 group ifname: " + res1['ifname'])
+        raise Exception("unexpected dev1 group ifname: " + grp_ifname1)
 
 def test_p2ps_connect_adv_go_persistent(dev):
     """P2PS auto-accept connection with advertisement as GO and having persistent group"""
@@ -1089,7 +1089,7 @@ def test_p2ps_channel_one_connected(dev, apdev):
     set_no_group_iface(dev[1], 0)
 
     try:
-        hapd = hostapd.add_ap(apdev[0]['ifname'],
+        hapd = hostapd.add_ap(apdev[0],
                               { "ssid": 'bss-2.4ghz', "channel": '7' })
         dev[1].connect("bss-2.4ghz", key_mgmt="NONE", scan_freq="2442")
 
@@ -1118,7 +1118,7 @@ def test_p2ps_channel_both_connected_same(dev, apdev):
     dev[2].flush_scan_cache()
 
     try:
-        hapd = hostapd.add_ap(apdev[0]['ifname'],
+        hapd = hostapd.add_ap(apdev[0],
                               { "ssid": 'bss-2.4ghz', "channel": '6' })
 
         dev[2].connect("bss-2.4ghz", key_mgmt="NONE", scan_freq="2437")
@@ -1149,10 +1149,10 @@ def test_p2ps_channel_both_connected_different(dev, apdev):
     set_no_group_iface(dev[1], 0)
 
     try:
-        hapd1 = hostapd.add_ap(apdev[0]['ifname'],
+        hapd1 = hostapd.add_ap(apdev[0],
                                { "ssid": 'bss-channel-3', "channel": '3' })
 
-        hapd2 = hostapd.add_ap(apdev[1]['ifname'],
+        hapd2 = hostapd.add_ap(apdev[1],
                                { "ssid": 'bss-channel-10', "channel": '10' })
 
         dev[0].connect("bss-channel-3", key_mgmt="NONE", scan_freq="2422")
@@ -1184,10 +1184,10 @@ def test_p2ps_channel_both_connected_different_mcc(dev, apdev):
     set_no_group_iface(dev[1], 0)
 
     try:
-        hapd1 = hostapd.add_ap(apdev[0]['ifname'],
+        hapd1 = hostapd.add_ap(apdev[0],
                                { "ssid": 'bss-channel-3', "channel": '3' })
 
-        hapd2 = hostapd.add_ap(apdev[1]['ifname'],
+        hapd2 = hostapd.add_ap(apdev[1],
                                { "ssid": 'bss-channel-10', "channel": '10' })
 
         dev[0].connect("bss-channel-3", key_mgmt="NONE", scan_freq="2422")
@@ -1245,7 +1245,7 @@ def test_p2ps_channel_sta_connected_disallow_freq(dev, apdev):
 
     try:
         dev[0].global_request("P2P_SET disallow_freq 2437")
-        hapd = hostapd.add_ap(apdev[0]['ifname'],
+        hapd = hostapd.add_ap(apdev[0],
                               { "ssid": 'bss-channel-6', "channel": '6' })
 
         dev[1].connect("bss-channel-6", key_mgmt="NONE", scan_freq="2437")
@@ -1283,7 +1283,7 @@ def test_p2ps_channel_sta_connected_disallow_freq_mcc(dev, apdev):
 
         try:
             dev[0].global_request("P2P_SET disallow_freq 2437")
-            hapd1 = hostapd.add_ap(apdev[0]['ifname'],
+            hapd1 = hostapd.add_ap(apdev[0],
                                    { "ssid": 'bss-channel-6', "channel": '6' })
 
             wpas.connect("bss-channel-6", key_mgmt="NONE", scan_freq="2437")
@@ -1366,7 +1366,7 @@ def test_p2ps_channel_active_go_and_station_same(dev, apdev):
     dev[2].global_request("P2P_SET listen_channel 11")
     dev[1].global_request("P2P_SET listen_channel 11")
     try:
-        hapd = hostapd.add_ap(apdev[0]['ifname'],
+        hapd = hostapd.add_ap(apdev[0],
                               { "ssid": 'bss-channel-11', "channel": '11' })
 
         dev[2].connect("bss-channel-11", key_mgmt="NONE", scan_freq="2462")
@@ -1403,7 +1403,7 @@ def test_p2ps_channel_active_go_and_station_different(dev, apdev):
     set_no_group_iface(dev[1], 0)
 
     try:
-        hapd = hostapd.add_ap(apdev[0]['ifname'],
+        hapd = hostapd.add_ap(apdev[0],
                               { "ssid": 'bss-channel-2', "channel": '2' })
 
         dev[0].connect("bss-channel-2", key_mgmt="NONE", scan_freq="2417")
@@ -1446,7 +1446,7 @@ def test_p2ps_channel_active_go_and_station_different_mcc(dev, apdev):
     set_no_group_iface(dev[1], 0)
 
     try:
-        hapd = hostapd.add_ap(apdev[0]['ifname'],
+        hapd = hostapd.add_ap(apdev[0],
                               { "ssid": 'bss-channel-6', "channel": '6' })
 
         dev[0].connect("bss-channel-6", key_mgmt="NONE", scan_freq="2437")
@@ -1473,3 +1473,74 @@ def test_p2ps_channel_active_go_and_station_different_mcc(dev, apdev):
         dev[0].request("DISCONNECT")
         hapd.disable()
         dev[0].global_request("P2P_SERVICE_DEL asp all")
+
+def test_p2ps_connect_p2p_device(dev):
+    """P2PS connection using cfg80211 P2P Device"""
+    run_p2ps_connect_p2p_device(dev, 0)
+
+def test_p2ps_connect_p2p_device_no_group_iface(dev):
+    """P2PS connection using cfg80211 P2P Device (no separate group interface)"""
+    run_p2ps_connect_p2p_device(dev, 1)
+
+def run_p2ps_connect_p2p_device(dev, no_group_iface):
+    with HWSimRadio(use_p2p_device=True) as (radio, iface):
+        wpas = WpaSupplicant(global_iface='/tmp/wpas-wlan5')
+        wpas.interface_add(iface)
+        wpas.global_request("SET p2p_no_group_iface %d" % no_group_iface)
+
+        p2ps_advertise(r_dev=dev[0], r_role='1',
+                       svc_name='org.wi-fi.wfds.send.rx',
+                       srv_info='I can receive files upto size 2 GB')
+        [adv_id, rcvd_svc_name] = p2ps_exact_seek(i_dev=wpas, r_dev=dev[0],
+                                                  svc_name='org.wi-fi.wfds.send.rx',
+                                                  srv_info='2 GB')
+
+        ev1, ev0 = p2ps_provision(wpas, dev[0], adv_id)
+        p2ps_connect_pd(dev[0], wpas, ev0, ev1)
+
+        ev0 = dev[0].global_request("P2P_SERVICE_DEL asp " + str(adv_id))
+        if ev0 is None:
+            raise Exception("Unable to remove the advertisement instance")
+        remove_group(dev[0], wpas)
+
+def test_p2ps_connect_p2p_device2(dev):
+    """P2PS connection using cfg80211 P2P Device (reverse)"""
+    run_p2ps_connect_p2p_device2(dev, 0)
+
+def test_p2ps_connect_p2p_device2_no_group_iface(dev):
+    """P2PS connection using cfg80211 P2P Device (reverse) (no separate group interface)"""
+    run_p2ps_connect_p2p_device2(dev, 1)
+
+def run_p2ps_connect_p2p_device2(dev, no_group_iface):
+    with HWSimRadio(use_p2p_device=True) as (radio, iface):
+        wpas = WpaSupplicant(global_iface='/tmp/wpas-wlan5')
+        wpas.interface_add(iface)
+        wpas.global_request("SET p2p_no_group_iface %d" % no_group_iface)
+
+        p2ps_advertise(r_dev=wpas, r_role='1',
+                       svc_name='org.wi-fi.wfds.send.rx',
+                       srv_info='I can receive files upto size 2 GB')
+        [adv_id, rcvd_svc_name] = p2ps_exact_seek(i_dev=dev[0], r_dev=wpas,
+                                                  svc_name='org.wi-fi.wfds.send.rx',
+                                                  srv_info='2 GB')
+
+        ev1, ev0 = p2ps_provision(dev[0], wpas, adv_id)
+        p2ps_connect_pd(wpas, dev[0], ev0, ev1)
+
+        ev0 = wpas.global_request("P2P_SERVICE_DEL asp " + str(adv_id))
+        if ev0 is None:
+            raise Exception("Unable to remove the advertisement instance")
+        remove_group(wpas, dev[0])
+
+def test_p2ps_connect_p2ps_method_no_pin(dev):
+    """P2P group formation using P2PS method without specifying PIN"""
+    dev[0].p2p_listen()
+    dev[1].p2p_go_neg_auth(dev[0].p2p_dev_addr(), None, "p2ps", go_intent=15)
+    dev[1].p2p_listen()
+    i_res = dev[0].p2p_go_neg_init(dev[1].p2p_dev_addr(), None, "p2ps",
+                                   timeout=20, go_intent=0)
+    r_res = dev[1].p2p_go_neg_auth_result()
+    logger.debug("i_res: " + str(i_res))
+    logger.debug("r_res: " + str(r_res))
+    check_grpform_results(i_res, r_res)
+    remove_group(dev[0], dev[1])

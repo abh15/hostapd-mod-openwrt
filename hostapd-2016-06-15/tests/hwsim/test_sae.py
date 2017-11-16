@@ -1,5 +1,5 @@
 # Test cases for SAE
-# Copyright (c) 2013-2015, Jouni Malinen <j@w1.fi>
+# Copyright (c) 2013-2016, Jouni Malinen <j@w1.fi>
 #
 # This software may be distributed under the terms of the BSD license.
 # See README for more details.
@@ -13,7 +13,7 @@ logger = logging.getLogger()
 
 import hwsim_utils
 import hostapd
-from utils import HwsimSkip, alloc_fail, fail_test
+from utils import HwsimSkip, alloc_fail, fail_test, wait_fail_trigger
 from test_ap_psk import find_wpas_process, read_process_memory, verify_not_present, get_key_locations
 
 def test_sae(dev, apdev):
@@ -23,7 +23,7 @@ def test_sae(dev, apdev):
     params = hostapd.wpa2_params(ssid="test-sae",
                                  passphrase="12345678")
     params['wpa_key_mgmt'] = 'SAE'
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     key_mgmt = hapd.get_config()['key_mgmt']
     if key_mgmt.split(' ')[0] != "SAE":
         raise Exception("Unexpected GET_CONFIG(key_mgmt): " + key_mgmt)
@@ -46,7 +46,7 @@ def test_sae_password_ecc(dev, apdev):
     params = hostapd.wpa2_params(ssid="test-sae",
                                  passphrase="12345678")
     params['wpa_key_mgmt'] = 'SAE'
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
 
     dev[0].request("SET sae_groups 19")
 
@@ -66,7 +66,7 @@ def test_sae_password_ffc(dev, apdev):
                                  passphrase="12345678")
     params['wpa_key_mgmt'] = 'SAE'
     params['sae_groups'] = '22'
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
 
     dev[0].request("SET sae_groups 22")
 
@@ -85,7 +85,7 @@ def test_sae_pmksa_caching(dev, apdev):
     params = hostapd.wpa2_params(ssid="test-sae",
                                  passphrase="12345678")
     params['wpa_key_mgmt'] = 'SAE'
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
 
     dev[0].request("SET sae_groups ")
     dev[0].connect("test-sae", psk="12345678", key_mgmt="SAE",
@@ -108,7 +108,7 @@ def test_sae_pmksa_caching_disabled(dev, apdev):
                                  passphrase="12345678")
     params['wpa_key_mgmt'] = 'SAE'
     params['disable_pmksa_caching'] = '1'
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
 
     dev[0].request("SET sae_groups ")
     dev[0].connect("test-sae", psk="12345678", key_mgmt="SAE",
@@ -142,7 +142,7 @@ def test_sae_groups(dev, apdev):
                                  passphrase="12345678")
     params['wpa_key_mgmt'] = 'SAE'
     params['sae_groups'] = ' '.join(groups)
-    hostapd.add_ap(apdev[0]['ifname'], params)
+    hostapd.add_ap(apdev[0], params)
 
     for g in groups:
         logger.info("Testing SAE group " + g)
@@ -181,7 +181,7 @@ def test_sae_group_nego(dev, apdev):
                                  passphrase="12345678")
     params['wpa_key_mgmt'] = 'SAE'
     params['sae_groups'] = '19'
-    hostapd.add_ap(apdev[0]['ifname'], params)
+    hostapd.add_ap(apdev[0], params)
 
     dev[0].request("SET sae_groups 25 26 20 19")
     dev[0].connect("test-sae-group-nego", psk="12345678", key_mgmt="SAE",
@@ -196,7 +196,7 @@ def test_sae_anti_clogging(dev, apdev):
     params = hostapd.wpa2_params(ssid="test-sae", passphrase="12345678")
     params['wpa_key_mgmt'] = 'SAE'
     params['sae_anti_clogging_threshold'] = '1'
-    hostapd.add_ap(apdev[0]['ifname'], params)
+    hostapd.add_ap(apdev[0], params)
 
     dev[0].request("SET sae_groups ")
     dev[1].request("SET sae_groups ")
@@ -217,7 +217,7 @@ def test_sae_forced_anti_clogging(dev, apdev):
     params = hostapd.wpa2_params(ssid="test-sae", passphrase="12345678")
     params['wpa_key_mgmt'] = 'SAE WPA-PSK'
     params['sae_anti_clogging_threshold'] = '0'
-    hostapd.add_ap(apdev[0]['ifname'], params)
+    hostapd.add_ap(apdev[0], params)
     dev[2].connect("test-sae", psk="12345678", scan_freq="2412")
     for i in range(0, 2):
         dev[i].request("SET sae_groups ")
@@ -231,7 +231,7 @@ def test_sae_mixed(dev, apdev):
     params = hostapd.wpa2_params(ssid="test-sae", passphrase="12345678")
     params['wpa_key_mgmt'] = 'SAE WPA-PSK'
     params['sae_anti_clogging_threshold'] = '0'
-    hostapd.add_ap(apdev[0]['ifname'], params)
+    hostapd.add_ap(apdev[0], params)
 
     dev[2].connect("test-sae", psk="12345678", scan_freq="2412")
     for i in range(0, 2):
@@ -246,7 +246,7 @@ def test_sae_missing_password(dev, apdev):
     params = hostapd.wpa2_params(ssid="test-sae",
                                  passphrase="12345678")
     params['wpa_key_mgmt'] = 'SAE'
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
 
     dev[0].request("SET sae_groups ")
     id = dev[0].connect("test-sae",
@@ -264,7 +264,7 @@ def test_sae_key_lifetime_in_memory(dev, apdev, params):
     password = "5ad144a7c1f5a5503baa6fa01dabc15b1843e8c01662d78d16b70b5cd23cf8b"
     p = hostapd.wpa2_params(ssid="test-sae", passphrase=password)
     p['wpa_key_mgmt'] = 'SAE'
-    hapd = hostapd.add_ap(apdev[0]['ifname'], p)
+    hapd = hostapd.add_ap(apdev[0], p)
 
     pid = find_wpas_process(dev[0])
 
@@ -388,7 +388,7 @@ def test_sae_oom_wpas(dev, apdev):
     params = hostapd.wpa2_params(ssid="test-sae",
                                  passphrase="12345678")
     params['wpa_key_mgmt'] = 'SAE'
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
 
     dev[0].request("SET sae_groups 25")
     tls = dev[0].request("GET tls_library")
@@ -412,7 +412,7 @@ def test_sae_proto_ecc(dev, apdev):
     params = hostapd.wpa2_params(ssid="test-sae",
                                  passphrase="12345678")
     params['wpa_key_mgmt'] = 'SAE'
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     bssid = apdev[0]['bssid']
 
     dev[0].request("SET sae_groups 19")
@@ -510,7 +510,7 @@ def test_sae_proto_ffc(dev, apdev):
     params = hostapd.wpa2_params(ssid="test-sae",
                                  passphrase="12345678")
     params['wpa_key_mgmt'] = 'SAE'
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     bssid = apdev[0]['bssid']
 
     dev[0].request("SET sae_groups 2")
@@ -589,7 +589,7 @@ def test_sae_no_ffc_by_default(dev, apdev):
         raise HwsimSkip("SAE not supported")
     params = hostapd.wpa2_params(ssid="test-sae", passphrase="12345678")
     params['wpa_key_mgmt'] = 'SAE'
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
 
     dev[0].request("SET sae_groups 5")
     dev[0].connect("test-sae", psk="12345678", key_mgmt="SAE", scan_freq="2412",
@@ -608,7 +608,7 @@ def sae_reflection_attack(apdev, dev, group):
     params = hostapd.wpa2_params(ssid="test-sae",
                                  passphrase="no-knowledge-of-passphrase")
     params['wpa_key_mgmt'] = 'SAE'
-    hapd = hostapd.add_ap(apdev['ifname'], params)
+    hapd = hostapd.add_ap(apdev, params)
     bssid = apdev['bssid']
 
     dev.scan_for_bss(bssid, freq=2412)
@@ -658,7 +658,7 @@ def test_sae_anti_clogging_proto(dev, apdev):
     params = hostapd.wpa2_params(ssid="test-sae",
                                  passphrase="no-knowledge-of-passphrase")
     params['wpa_key_mgmt'] = 'SAE'
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     bssid = apdev[0]['bssid']
 
     dev[0].scan_for_bss(bssid, freq=2412)
@@ -699,7 +699,7 @@ def test_sae_no_random(dev, apdev):
         raise HwsimSkip("SAE not supported")
     params = hostapd.wpa2_params(ssid="test-sae", passphrase="12345678")
     params['wpa_key_mgmt'] = 'SAE'
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
 
     dev[0].request("SET sae_groups ")
     tests = [ (1, "os_get_random;sae_get_rand"),
@@ -712,3 +712,124 @@ def test_sae_no_random(dev, apdev):
                            scan_freq="2412")
             dev[0].request("REMOVE_NETWORK all")
             dev[0].wait_disconnected()
+
+def test_sae_pwe_failure(dev, apdev):
+    """SAE and pwe failure"""
+    if "SAE" not in dev[0].get_capability("auth_alg"):
+        raise HwsimSkip("SAE not supported")
+    params = hostapd.wpa2_params(ssid="test-sae", passphrase="12345678")
+    params['wpa_key_mgmt'] = 'SAE'
+    params['sae_groups'] = '19 5'
+    hapd = hostapd.add_ap(apdev[0], params)
+
+    dev[0].request("SET sae_groups 19")
+    with fail_test(dev[0], 1, "hmac_sha256_vector;sae_derive_pwe_ecc"):
+        dev[0].connect("test-sae", psk="12345678", key_mgmt="SAE",
+                       scan_freq="2412")
+        dev[0].request("REMOVE_NETWORK all")
+        dev[0].wait_disconnected()
+    with fail_test(dev[0], 1, "sae_test_pwd_seed_ecc"):
+        dev[0].connect("test-sae", psk="12345678", key_mgmt="SAE",
+                       scan_freq="2412")
+        dev[0].request("REMOVE_NETWORK all")
+        dev[0].wait_disconnected()
+
+    dev[0].request("SET sae_groups 5")
+    with fail_test(dev[0], 1, "hmac_sha256_vector;sae_derive_pwe_ffc"):
+        dev[0].connect("test-sae", psk="12345678", key_mgmt="SAE",
+                       scan_freq="2412")
+        dev[0].request("REMOVE_NETWORK all")
+        dev[0].wait_disconnected()
+
+    dev[0].request("SET sae_groups 5")
+    with fail_test(dev[0], 1, "sae_test_pwd_seed_ffc"):
+        dev[0].connect("test-sae", psk="12345678", key_mgmt="SAE",
+                       scan_freq="2412")
+        dev[0].request("REMOVE_NETWORK all")
+        dev[0].wait_disconnected()
+    with fail_test(dev[0], 2, "sae_test_pwd_seed_ffc"):
+        dev[0].connect("test-sae", psk="12345678", key_mgmt="SAE",
+                       scan_freq="2412")
+        dev[0].request("REMOVE_NETWORK all")
+        dev[0].wait_disconnected()
+
+def test_sae_bignum_failure(dev, apdev):
+    """SAE and bignum failure"""
+    if "SAE" not in dev[0].get_capability("auth_alg"):
+        raise HwsimSkip("SAE not supported")
+    params = hostapd.wpa2_params(ssid="test-sae", passphrase="12345678")
+    params['wpa_key_mgmt'] = 'SAE'
+    params['sae_groups'] = '19 5 22'
+    hapd = hostapd.add_ap(apdev[0], params)
+
+    dev[0].request("SET sae_groups 19")
+    tests = [ (1, "crypto_bignum_init_set;get_rand_1_to_p_1"),
+              (1, "crypto_bignum_init;is_quadratic_residue_blind"),
+              (1, "crypto_bignum_mulmod;is_quadratic_residue_blind"),
+              (2, "crypto_bignum_mulmod;is_quadratic_residue_blind"),
+              (3, "crypto_bignum_mulmod;is_quadratic_residue_blind"),
+              (1, "crypto_bignum_legendre;is_quadratic_residue_blind"),
+              (1, "crypto_bignum_init_set;sae_test_pwd_seed_ecc"),
+              (1, "crypto_ec_point_compute_y_sqr;sae_test_pwd_seed_ecc"),
+              (1, "crypto_bignum_init_set;get_random_qr_qnr"),
+              (1, "crypto_bignum_to_bin;sae_derive_pwe_ecc"),
+              (1, "crypto_ec_point_init;sae_derive_pwe_ecc"),
+              (1, "crypto_ec_point_solve_y_coord;sae_derive_pwe_ecc"),
+              (1, "crypto_ec_point_init;sae_derive_commit_element_ecc"),
+              (1, "crypto_ec_point_mul;sae_derive_commit_element_ecc"),
+              (1, "crypto_ec_point_invert;sae_derive_commit_element_ecc"),
+              (1, "crypto_bignum_init;=sae_derive_commit"),
+              (1, "crypto_ec_point_init;sae_derive_k_ecc"),
+              (1, "crypto_ec_point_mul;sae_derive_k_ecc"),
+              (1, "crypto_ec_point_add;sae_derive_k_ecc"),
+              (2, "crypto_ec_point_mul;sae_derive_k_ecc"),
+              (1, "crypto_ec_point_to_bin;sae_derive_k_ecc"),
+              (1, "crypto_bignum_legendre;get_random_qr_qnr"),
+              (1, "sha256_prf;sae_derive_keys"),
+              (1, "crypto_bignum_init;sae_derive_keys"),
+              (1, "crypto_bignum_init_set;sae_parse_commit_scalar"),
+              (1, "crypto_bignum_to_bin;sae_parse_commit_element_ecc"),
+              (1, "crypto_ec_point_from_bin;sae_parse_commit_element_ecc") ]
+    for count, func in tests:
+        with fail_test(dev[0], count, func):
+            dev[0].connect("test-sae", psk="12345678", key_mgmt="SAE",
+                           scan_freq="2412", wait_connect=False)
+            wait_fail_trigger(dev[0], "GET_FAIL")
+            dev[0].request("REMOVE_NETWORK all")
+
+    dev[0].request("SET sae_groups 5")
+    tests = [ (1, "crypto_bignum_init_set;sae_set_group"),
+              (2, "crypto_bignum_init_set;sae_set_group"),
+              (1, "crypto_bignum_init_set;sae_get_rand"),
+              (1, "crypto_bignum_init_set;sae_test_pwd_seed_ffc"),
+              (1, "crypto_bignum_exptmod;sae_test_pwd_seed_ffc"),
+              (1, "crypto_bignum_init;sae_derive_pwe_ffc"),
+              (1, "crypto_bignum_init;sae_derive_commit_element_ffc"),
+              (1, "crypto_bignum_exptmod;sae_derive_commit_element_ffc"),
+              (1, "crypto_bignum_inverse;sae_derive_commit_element_ffc"),
+              (1, "crypto_bignum_init;sae_derive_k_ffc"),
+              (1, "crypto_bignum_exptmod;sae_derive_k_ffc"),
+              (1, "crypto_bignum_mulmod;sae_derive_k_ffc"),
+              (2, "crypto_bignum_exptmod;sae_derive_k_ffc"),
+              (1, "crypto_bignum_to_bin;sae_derive_k_ffc"),
+              (1, "crypto_bignum_init_set;sae_parse_commit_element_ffc"),
+              (1, "crypto_bignum_init;sae_parse_commit_element_ffc"),
+              (2, "crypto_bignum_init_set;sae_parse_commit_element_ffc"),
+              (1, "crypto_bignum_exptmod;sae_parse_commit_element_ffc") ]
+    for count, func in tests:
+        with fail_test(dev[0], count, func):
+            dev[0].connect("test-sae", psk="12345678", key_mgmt="SAE",
+                           scan_freq="2412", wait_connect=False)
+            wait_fail_trigger(dev[0], "GET_FAIL")
+            dev[0].request("REMOVE_NETWORK all")
+
+    dev[0].request("SET sae_groups 22")
+    tests = [ (1, "crypto_bignum_init_set;sae_test_pwd_seed_ffc"),
+              (1, "crypto_bignum_sub;sae_test_pwd_seed_ffc"),
+              (1, "crypto_bignum_div;sae_test_pwd_seed_ffc") ]
+    for count, func in tests:
+        with fail_test(dev[0], count, func):
+            dev[0].connect("test-sae", psk="12345678", key_mgmt="SAE",
+                           scan_freq="2412", wait_connect=False)
+            wait_fail_trigger(dev[0], "GET_FAIL")
+            dev[0].request("REMOVE_NETWORK all")

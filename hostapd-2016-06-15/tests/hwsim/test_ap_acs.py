@@ -16,19 +16,17 @@ from test_ap_ht import clear_scan_cache
 def force_prev_ap_on_24g(ap):
     # For now, make sure the last operating channel was on 2.4 GHz band to get
     # sufficient survey data from mac80211_hwsim.
-    hostapd.add_ap(ap['ifname'], { "ssid": "open" })
+    hostapd.add_ap(ap, { "ssid": "open" })
     time.sleep(0.1)
-    hapd_global = hostapd.HostapdGlobal()
-    hapd_global.remove(ap['ifname'])
+    hostapd.remove_bss(ap)
 
 def force_prev_ap_on_5g(ap):
     # For now, make sure the last operating channel was on 5 GHz band to get
     # sufficient survey data from mac80211_hwsim.
-    hostapd.add_ap(ap['ifname'], { "ssid": "open", "hw_mode": "a",
-                                   "channel": "36", "country_code": "US" })
+    hostapd.add_ap(ap, { "ssid": "open", "hw_mode": "a",
+                         "channel": "36", "country_code": "US" })
     time.sleep(0.1)
-    hapd_global = hostapd.HostapdGlobal()
-    hapd_global.remove(ap['ifname'])
+    hostapd.remove_bss(ap)
 
 def wait_acs(hapd):
     ev = hapd.wait_event(["ACS-STARTED", "ACS-COMPLETED", "ACS-FAILED",
@@ -64,7 +62,7 @@ def test_ap_acs(dev, apdev):
     force_prev_ap_on_24g(apdev[0])
     params = hostapd.wpa2_params(ssid="test-acs", passphrase="12345678")
     params['channel'] = '0'
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params, wait_enabled=False)
+    hapd = hostapd.add_ap(apdev[0], params, wait_enabled=False)
     wait_acs(hapd)
 
     freq = hapd.get_status_field("freq")
@@ -79,7 +77,7 @@ def test_ap_acs_chanlist(dev, apdev):
     params = hostapd.wpa2_params(ssid="test-acs", passphrase="12345678")
     params['channel'] = '0'
     params['chanlist'] = '1 6 11'
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params, wait_enabled=False)
+    hapd = hostapd.add_ap(apdev[0], params, wait_enabled=False)
     wait_acs(hapd)
 
     freq = hapd.get_status_field("freq")
@@ -91,12 +89,10 @@ def test_ap_acs_chanlist(dev, apdev):
 def test_ap_multi_bss_acs(dev, apdev):
     """hostapd start with a multi-BSS configuration file using ACS"""
     skip_with_fips(dev[0])
-    ifname = apdev[0]['ifname']
     force_prev_ap_on_24g(apdev[0])
 
     # start the actual test
-    hostapd.add_iface(ifname, 'multi-bss-acs.conf')
-    hapd = hostapd.Hostapd(ifname)
+    hapd = hostapd.add_iface(apdev[0], 'multi-bss-acs.conf')
     hapd.enable()
     wait_acs(hapd)
 
@@ -115,7 +111,7 @@ def test_ap_acs_40mhz(dev, apdev):
     params = hostapd.wpa2_params(ssid="test-acs", passphrase="12345678")
     params['channel'] = '0'
     params['ht_capab'] = '[HT40+]'
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params, wait_enabled=False)
+    hapd = hostapd.add_ap(apdev[0], params, wait_enabled=False)
     wait_acs(hapd)
 
     freq = hapd.get_status_field("freq")
@@ -136,7 +132,7 @@ def test_ap_acs_5ghz(dev, apdev):
         params['hw_mode'] = 'a'
         params['channel'] = '0'
         params['country_code'] = 'US'
-        hapd = hostapd.add_ap(apdev[0]['ifname'], params, wait_enabled=False)
+        hapd = hostapd.add_ap(apdev[0], params, wait_enabled=False)
         wait_acs(hapd)
         freq = hapd.get_status_field("freq")
         if int(freq) < 5000:
@@ -161,7 +157,7 @@ def test_ap_acs_5ghz_40mhz(dev, apdev):
         params['channel'] = '0'
         params['ht_capab'] = '[HT40+]'
         params['country_code'] = 'US'
-        hapd = hostapd.add_ap(apdev[0]['ifname'], params, wait_enabled=False)
+        hapd = hostapd.add_ap(apdev[0], params, wait_enabled=False)
         wait_acs(hapd)
         freq = hapd.get_status_field("freq")
         if int(freq) < 5000:
@@ -192,7 +188,7 @@ def test_ap_acs_vht(dev, apdev):
         params['country_code'] = 'US'
         params['ieee80211ac'] = '1'
         params['vht_oper_chwidth'] = '1'
-        hapd = hostapd.add_ap(apdev[0]['ifname'], params, wait_enabled=False)
+        hapd = hostapd.add_ap(apdev[0], params, wait_enabled=False)
         wait_acs(hapd)
         freq = hapd.get_status_field("freq")
         if int(freq) < 5000:
@@ -217,7 +213,7 @@ def test_ap_acs_bias(dev, apdev):
     params = hostapd.wpa2_params(ssid="test-acs", passphrase="12345678")
     params['channel'] = '0'
     params['acs_chan_bias'] = '1:0.8 3:1.2 6:0.7 11:0.8'
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params, wait_enabled=False)
+    hapd = hostapd.add_ap(apdev[0], params, wait_enabled=False)
     wait_acs(hapd)
 
     freq = hapd.get_status_field("freq")

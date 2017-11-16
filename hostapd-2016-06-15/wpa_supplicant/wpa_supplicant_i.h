@@ -44,6 +44,7 @@ struct wpa_driver_associate_params;
 struct ctrl_iface_priv;
 struct ctrl_iface_global_priv;
 struct wpas_dbus_priv;
+struct wpas_binder_priv;
 
 /**
  * struct wpa_interface - Parameters for wpa_supplicant_add_iface()
@@ -228,6 +229,17 @@ struct wpa_params {
 	char *conf_p2p_dev;
 #endif /* CONFIG_P2P */
 
+#ifdef CONFIG_MATCH_IFACE
+	/**
+	 * match_ifaces - Interface descriptions to match
+	 */
+	struct wpa_interface *match_ifaces;
+
+	/**
+	 * match_iface_count - Number of defined matching interfaces
+	 */
+	int match_iface_count;
+#endif /* CONFIG_MATCH_IFACE */
 };
 
 struct p2p_srv_bonjour {
@@ -253,6 +265,7 @@ struct wpa_global {
 	struct wpa_params params;
 	struct ctrl_iface_global_priv *ctrl_iface;
 	struct wpas_dbus_priv *dbus;
+	struct wpas_binder_priv *binder;
 	void **drv_priv;
 	size_t drv_count;
 	struct os_time suspend_time;
@@ -308,11 +321,6 @@ struct wpa_radio {
 
 #define MAX_ACTIVE_WORKS 2
 
-enum wpa_radio_work_band {
-	BAND_2_4_GHZ = BIT(0),
-	BAND_5_GHZ = BIT(1),
-	BAND_60_GHZ = BIT(2),
-};
 
 /**
  * struct wpa_radio_work - Radio work item
@@ -358,6 +366,9 @@ struct wpa_external_work {
 	unsigned int timeout;
 };
 
+enum wpa_radio_work_band wpas_freq_to_band(int freq);
+unsigned int wpas_get_bands(struct wpa_supplicant *wpa_s, const int *freqs);
+
 /**
  * offchannel_send_action_result - Result of offchannel send Action frame
  */
@@ -380,11 +391,6 @@ struct wps_ap_info {
 	struct os_reltime last_attempt;
 	unsigned int pbc_active;
 	u8 uuid[WPS_UUID_LEN];
-};
-
-struct wpa_ssid_value {
-	u8 ssid[SSID_MAX_LEN];
-	size_t ssid_len;
 };
 
 #define WPA_FREQ_USED_BY_INFRA_STATION BIT(0)
@@ -434,6 +440,12 @@ struct icon_entry {
 	size_t image_len;
 };
 
+struct wpa_bss_tmp_disallowed {
+	struct dl_list list;
+	u8 bssid[ETH_ALEN];
+	struct os_reltime disallowed_until;
+};
+
 /**
  * struct wpa_supplicant - Internal data for wpa_supplicant interface
  *
@@ -447,12 +459,16 @@ struct wpa_supplicant {
 	struct wpa_radio *radio; /* shared radio context */
 	struct dl_list radio_list; /* list head: struct wpa_radio::ifaces */
 	struct wpa_supplicant *parent;
+	struct wpa_supplicant *p2pdev;
 	struct wpa_supplicant *next;
 	struct l2_packet_data *l2;
 	struct l2_packet_data *l2_br;
 	unsigned char own_addr[ETH_ALEN];
 	unsigned char perm_addr[ETH_ALEN];
 	char ifname[100];
+#ifdef CONFIG_MATCH_IFACE
+	int matched;
+#endif /* CONFIG_MATCH_IFACE */
 #ifdef CONFIG_CTRL_IFACE_DBUS
 	char *dbus_path;
 #endif /* CONFIG_CTRL_IFACE_DBUS */
@@ -463,6 +479,9 @@ struct wpa_supplicant {
 	char *preq_notify_peer;
 #endif /* CONFIG_AP */
 #endif /* CONFIG_CTRL_IFACE_DBUS_NEW */
+#ifdef CONFIG_CTRL_IFACE_BINDER
+	const void *binder_object_key;
+#endif /* CONFIG_CTRL_IFACE_BINDER */
 	char bridge_ifname[16];
 
 	char *confname;
@@ -475,7 +494,8 @@ struct wpa_supplicant {
 	u8 pending_bssid[ETH_ALEN]; /* If wpa_state == WPA_ASSOCIATING, this
 				     * field contains the target BSSID. */
 	int reassociate; /* reassociation requested */
-	int reassoc_same_bss; /* reassociating to the same bss */
+	unsigned int reassoc_same_bss:1; /* reassociating to the same BSS */
+	unsigned int reassoc_same_ess:1; /* reassociating to the same ESS */
 	int disconnected; /* all connections disabled; i.e., do no reassociate
 			   * before this has been cleared */
 	struct wpa_ssid *current_ssid;
@@ -634,6 +654,7 @@ struct wpa_supplicant {
 #define MAX_SCAN_ID 16
 	int scan_id[MAX_SCAN_ID];
 	unsigned int scan_id_count;
+	u8 next_scan_bssid[ETH_ALEN];
 
 	struct wpa_ssid_value *ssids_from_scan_req;
 	unsigned int num_ssids_from_scan_req;
@@ -748,7 +769,6 @@ struct wpa_supplicant {
 	unsigned int mesh_if_created:1;
 	unsigned int mesh_ht_enabled:1;
 	unsigned int mesh_vht_enabled:1;
-	int mesh_auth_block_duration; /* sec */
 #endif /* CONFIG_MESH */
 
 	unsigned int off_channel_freq;
@@ -944,6 +964,9 @@ struct wpa_supplicant {
 	/* WLAN_REASON_* reason codes. Negative if locally generated. */
 	int disconnect_reason;
 
+	/* WLAN_STATUS_* status codes from (Re)Association Response frame. */
+	u16 assoc_status_code;
+
 	struct ext_password_data *ext_pw;
 
 	struct wpabuf *last_gas_resp, *prev_gas_resp;
@@ -1016,6 +1039,32 @@ struct wpa_supplicant {
 	const struct wpabuf *fst_ies;
 	struct wpabuf *received_mb_ies;
 #endif /* CONFIG_FST */
+
+#ifdef CONFIG_MBO
+	/* Multiband operation non-preferred channel */
+	struct wpa_mbo_non_pref_channel {
+		enum mbo_non_pref_chan_reason reason;
+		u8 oper_class;
+		u8 chan;
+		u8 reason_detail;
+		u8 preference;
+	} *non_pref_chan;
+	size_t non_pref_chan_num;
+	u8 mbo_wnm_token;
+#endif /* CONFIG_MBO */
+
+	/*
+	 * This should be under CONFIG_MBO, but it is left out to allow using
+	 * the bss_temp_disallowed list for other purposes as well.
+	 */
+	struct dl_list bss_tmp_disallowed;
+
+	/*
+	 * Content of a measurement report element with type 8 (LCI),
+	 * own location.
+	 */
+	struct wpabuf *lci;
+	struct os_reltime lci_time;
 };
 
 
@@ -1081,6 +1130,8 @@ void free_hw_features(struct wpa_supplicant *wpa_s);
 
 void wpa_show_license(void);
 
+struct wpa_interface * wpa_supplicant_match_iface(struct wpa_global *global,
+						  const char *ifname);
 struct wpa_supplicant * wpa_supplicant_add_iface(struct wpa_global *global,
 						 struct wpa_interface *iface,
 						 struct wpa_supplicant *parent);
@@ -1119,14 +1170,34 @@ void wpas_rrm_reset(struct wpa_supplicant *wpa_s);
 void wpas_rrm_process_neighbor_rep(struct wpa_supplicant *wpa_s,
 				   const u8 *report, size_t report_len);
 int wpas_rrm_send_neighbor_rep_request(struct wpa_supplicant *wpa_s,
-				       const struct wpa_ssid *ssid,
+				       const struct wpa_ssid_value *ssid,
+				       int lci, int civic,
 				       void (*cb)(void *ctx,
 						  struct wpabuf *neighbor_rep),
 				       void *cb_ctx);
+void wpas_rrm_handle_radio_measurement_request(struct wpa_supplicant *wpa_s,
+					       const u8 *src,
+					       const u8 *frame, size_t len);
 void wpas_rrm_handle_link_measurement_request(struct wpa_supplicant *wpa_s,
 					      const u8 *src,
 					      const u8 *frame, size_t len,
 					      int rssi);
+
+
+/* MBO functions */
+int wpas_mbo_ie(struct wpa_supplicant *wpa_s, u8 *buf, size_t len);
+const u8 * wpas_mbo_get_bss_attr(struct wpa_bss *bss, enum mbo_attr_id attr);
+int wpas_mbo_update_non_pref_chan(struct wpa_supplicant *wpa_s,
+				  const char *non_pref_chan);
+void wpas_mbo_scan_ie(struct wpa_supplicant *wpa_s, struct wpabuf *ie);
+int wpas_mbo_supp_op_class_ie(struct wpa_supplicant *wpa_s, int freq, u8 *pos,
+			      size_t len);
+void wpas_mbo_ie_trans_req(struct wpa_supplicant *wpa_s, const u8 *ie,
+			   size_t len);
+size_t wpas_mbo_ie_bss_trans_reject(struct wpa_supplicant *wpa_s, u8 *pos,
+				    size_t len,
+				    enum mbo_transition_reject_reason reason);
+void wpas_mbo_update_cell_capa(struct wpa_supplicant *wpa_s, u8 mbo_cell_capa);
 
 /**
  * wpa_supplicant_ctrl_iface_ctrl_rsp_handle - Handle a control response
@@ -1205,5 +1276,17 @@ void fst_wpa_supplicant_fill_iface_obj(struct wpa_supplicant *wpa_s,
 #endif /* CONFIG_FST */
 
 int wpas_sched_scan_plans_set(struct wpa_supplicant *wpa_s, const char *cmd);
+
+struct hostapd_hw_modes * get_mode(struct hostapd_hw_modes *modes,
+				   u16 num_modes, enum hostapd_hw_mode mode);
+
+void wpa_bss_tmp_disallow(struct wpa_supplicant *wpa_s, const u8 *bssid,
+			  unsigned int sec);
+int wpa_is_bss_tmp_disallowed(struct wpa_supplicant *wpa_s, const u8 *bssid);
+
+struct wpa_ssid * wpa_scan_res_match(struct wpa_supplicant *wpa_s,
+				     int i, struct wpa_bss *bss,
+				     struct wpa_ssid *group,
+				     int only_first_ssid);
 
 #endif /* WPA_SUPPLICANT_I_H */

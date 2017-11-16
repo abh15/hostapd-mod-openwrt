@@ -15,6 +15,7 @@
 #include "utils/common.h"
 #include "utils/eloop.h"
 #include "common/ieee802_11_defs.h"
+#include "common/ieee802_11_common.h"
 #include "common/qca-vendor.h"
 #include "driver_nl80211.h"
 
@@ -95,12 +96,20 @@ static int nl80211_get_noise_for_scan_results(
 void wpa_driver_nl80211_scan_timeout(void *eloop_ctx, void *timeout_ctx)
 {
 	struct wpa_driver_nl80211_data *drv = eloop_ctx;
+
+	wpa_printf(MSG_DEBUG, "nl80211: Scan timeout - try to abort it");
+	if (!wpa_driver_nl80211_abort_scan(drv->first_bss))
+		return;
+
+	wpa_printf(MSG_DEBUG, "nl80211: Failed to abort scan");
+
 	if (drv->ap_scan_as_station != NL80211_IFTYPE_UNSPECIFIED) {
 		wpa_driver_nl80211_set_mode(drv->first_bss,
 					    drv->ap_scan_as_station);
 		drv->ap_scan_as_station = NL80211_IFTYPE_UNSPECIFIED;
 	}
-	wpa_printf(MSG_DEBUG, "Scan timeout - try to get results");
+
+	wpa_printf(MSG_DEBUG, "nl80211: Try to get scan results");
 	wpa_supplicant_event(timeout_ctx, EVENT_SCAN_RESULTS, NULL);
 }
 
@@ -253,6 +262,13 @@ int wpa_driver_nl80211_scan(struct i802_bss *bss,
 		nla_nest_end(msg, rates);
 
 		if (nla_put_flag(msg, NL80211_ATTR_TX_NO_CCK_RATE))
+			goto fail;
+	}
+
+	if (params->bssid) {
+		wpa_printf(MSG_DEBUG, "nl80211: Scan for a specific BSSID: "
+			   MACSTR, MAC2STR(params->bssid));
+		if (nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, params->bssid))
 			goto fail;
 	}
 
@@ -522,28 +538,6 @@ int wpa_driver_nl80211_stop_sched_scan(void *priv)
 }
 
 
-const u8 * nl80211_get_ie(const u8 *ies, size_t ies_len, u8 ie)
-{
-	const u8 *end, *pos;
-
-	if (ies == NULL)
-		return NULL;
-
-	pos = ies;
-	end = ies + ies_len;
-
-	while (end - pos > 1) {
-		if (2 + pos[1] > end - pos)
-			break;
-		if (pos[0] == ie)
-			return pos;
-		pos += 2 + pos[1];
-	}
-
-	return NULL;
-}
-
-
 static int nl80211_scan_filtered(struct wpa_driver_nl80211_data *drv,
 				 const u8 *ie, size_t ie_len)
 {
@@ -553,7 +547,7 @@ static int nl80211_scan_filtered(struct wpa_driver_nl80211_data *drv,
 	if (drv->filter_ssids == NULL)
 		return 0;
 
-	ssid = nl80211_get_ie(ie, ie_len, WLAN_EID_SSID);
+	ssid = get_ie(ie, ie_len, WLAN_EID_SSID);
 	if (ssid == NULL)
 		return 1;
 
@@ -714,9 +708,9 @@ int bss_info_handler(struct nl_msg *msg, void *arg)
 		if (os_memcmp(res->res[i]->bssid, r->bssid, ETH_ALEN) != 0)
 			continue;
 
-		s1 = nl80211_get_ie((u8 *) (res->res[i] + 1),
-				    res->res[i]->ie_len, WLAN_EID_SSID);
-		s2 = nl80211_get_ie((u8 *) (r + 1), r->ie_len, WLAN_EID_SSID);
+		s1 = get_ie((u8 *) (res->res[i] + 1),
+			    res->res[i]->ie_len, WLAN_EID_SSID);
+		s2 = get_ie((u8 *) (r + 1), r->ie_len, WLAN_EID_SSID);
 		if (s1 == NULL || s2 == NULL || s1[1] != s2[1] ||
 		    os_memcmp(s1, s2, 2 + s1[1]) != 0)
 			continue;

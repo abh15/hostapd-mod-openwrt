@@ -193,7 +193,7 @@ static void ieee802_1x_encapsulate_radius(struct eapol_test_data *e,
 		return;
 	}
 
-	radius_msg_make_authenticator(msg, (u8 *) e, sizeof(*e));
+	radius_msg_make_authenticator(msg);
 
 	hdr = (const struct eap_hdr *) eap;
 	pos = (const u8 *) (hdr + 1);
@@ -255,6 +255,13 @@ static void ieee802_1x_encapsulate_radius(struct eapol_test_data *e,
 	    !radius_msg_add_attr_int32(msg, RADIUS_ATTR_NAS_PORT_TYPE,
 				       RADIUS_NAS_PORT_TYPE_IEEE_802_11)) {
 		printf("Could not add NAS-Port-Type\n");
+		goto fail;
+	}
+
+	if (!find_extra_attr(e->extra_attrs, RADIUS_ATTR_SERVICE_TYPE) &&
+	    !radius_msg_add_attr_int32(msg, RADIUS_ATTR_SERVICE_TYPE,
+				       RADIUS_SERVICE_TYPE_FRAMED)) {
+		printf("Could not add Service-Type\n");
 		goto fail;
 	}
 

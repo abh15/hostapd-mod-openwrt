@@ -644,13 +644,25 @@ static void i2r_LogotypeImageInfo(LogotypeImageInfo *info, BIO *out, int indent)
 	} else {
 		BIO_printf(out, "%*stype: default (1)\n", indent, "");
 	}
+	val = ASN1_INTEGER_get(info->fileSize);
+	BIO_printf(out, "%*sfileSize: %ld\n", indent, "", val);
 	val = ASN1_INTEGER_get(info->xSize);
 	BIO_printf(out, "%*sxSize: %ld\n", indent, "", val);
 	val = ASN1_INTEGER_get(info->ySize);
 	BIO_printf(out, "%*sySize: %ld\n", indent, "", val);
 	if (info->resolution) {
-		BIO_printf(out, "%*sresolution\n", indent, "");
-		/* TODO */
+		BIO_printf(out, "%*sresolution [%d]\n", indent, "",
+			   info->resolution->type);
+		switch (info->resolution->type) {
+		case 0:
+			val = ASN1_INTEGER_get(info->resolution->d.numBits);
+			BIO_printf(out, "%*snumBits: %ld\n", indent, "", val);
+			break;
+		case 1:
+			val = ASN1_INTEGER_get(info->resolution->d.tableSize);
+			BIO_printf(out, "%*stableSize: %ld\n", indent, "", val);
+			break;
+		}
 	}
 	if (info->language) {
 		BIO_printf(out, "%*slanguage: ", indent, "");
@@ -845,8 +857,10 @@ static void parse_cert(struct http_ctx *ctx, struct http_cert *hcert,
 	os_memset(hcert, 0, sizeof(*hcert));
 
 	*names = X509_get_ext_d2i(cert, NID_subject_alt_name, NULL, NULL);
-	if (*names)
+	if (*names) {
 		add_alt_names(ctx, hcert, *names);
+		sk_GENERAL_NAME_pop_free(*names, GENERAL_NAME_free);
+	}
 
 	add_logotype_ext(ctx, hcert, cert);
 }
@@ -1202,6 +1216,7 @@ static int ocsp_resp_cb(SSL *s, void *arg)
 		wpa_printf(MSG_INFO, "OpenSSL: Could not find current server certificate from OCSP response%s",
 			   (ctx->ocsp == MANDATORY_OCSP) ? "" :
 			   " (OCSP not required)");
+		OCSP_CERTID_free(id);
 		OCSP_BASICRESP_free(basic);
 		OCSP_RESPONSE_free(rsp);
 		if (ctx->ocsp == MANDATORY_OCSP)
@@ -1209,6 +1224,7 @@ static int ocsp_resp_cb(SSL *s, void *arg)
 			ctx->last_err = "Could not find current server certificate from OCSP response";
 		return (ctx->ocsp == MANDATORY_OCSP) ? 0 : 1;
 	}
+	OCSP_CERTID_free(id);
 
 	if (!OCSP_check_validity(this_update, next_update, 5 * 60, -1)) {
 		tls_show_errors(__func__, "OpenSSL: OCSP status times invalid");

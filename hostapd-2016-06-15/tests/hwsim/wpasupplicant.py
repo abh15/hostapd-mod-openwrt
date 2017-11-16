@@ -10,28 +10,50 @@ import logging
 import binascii
 import re
 import struct
-import subprocess
 import wpaspy
+import remotehost
 
 logger = logging.getLogger()
 wpas_ctrl = '/var/run/wpa_supplicant'
 
 class WpaSupplicant:
-    def __init__(self, ifname=None, global_iface=None):
+    def __init__(self, ifname=None, global_iface=None, hostname=None,
+                 port=9877, global_port=9878):
+        self.hostname = hostname
         self.group_ifname = None
         self.gctrl_mon = None
+        self.host = remotehost.Host(hostname, ifname)
+        self._group_dbg = None
         if ifname:
-            self.set_ifname(ifname)
+            self.set_ifname(ifname, hostname, port)
+            res = self.get_driver_status()
+            if 'capa.flags' in res and int(res['capa.flags'], 0) & 0x20000000:
+                self.p2p_dev_ifname = 'p2p-dev-' + self.ifname
+            else:
+                self.p2p_dev_ifname = ifname
         else:
             self.ifname = None
 
         self.global_iface = global_iface
         if global_iface:
-            self.global_ctrl = wpaspy.Ctrl(global_iface)
-            self.global_mon = wpaspy.Ctrl(global_iface)
+            if hostname != None:
+                self.global_ctrl = wpaspy.Ctrl(hostname, global_port)
+                self.global_mon = wpaspy.Ctrl(hostname, global_port)
+                self.global_dbg = hostname + "/" + str(global_port) + "/"
+            else:
+                self.global_ctrl = wpaspy.Ctrl(global_iface)
+                self.global_mon = wpaspy.Ctrl(global_iface)
+                self.global_dbg = ""
             self.global_mon.attach()
         else:
             self.global_mon = None
+
+    def terminate(self):
+        if self.global_mon:
+            self.global_mon.detach()
+            self.global_mon = None
+            self.global_ctrl.terminate()
+            self.global_ctrl = None
 
     def close_ctrl(self):
         if self.global_mon:
@@ -40,10 +62,17 @@ class WpaSupplicant:
             self.global_ctrl = None
         self.remove_ifname()
 
-    def set_ifname(self, ifname):
+    def set_ifname(self, ifname, hostname=None, port=9877):
         self.ifname = ifname
-        self.ctrl = wpaspy.Ctrl(os.path.join(wpas_ctrl, ifname))
-        self.mon = wpaspy.Ctrl(os.path.join(wpas_ctrl, ifname))
+        if hostname != None:
+            self.ctrl = wpaspy.Ctrl(hostname, port)
+            self.mon = wpaspy.Ctrl(hostname, port)
+            self.host = remotehost.Host(hostname, ifname)
+            self.dbg = hostname + "/" + ifname
+        else:
+            self.ctrl = wpaspy.Ctrl(os.path.join(wpas_ctrl, ifname))
+            self.mon = wpaspy.Ctrl(os.path.join(wpas_ctrl, ifname))
+            self.dbg = ifname
         self.mon.attach()
 
     def remove_ifname(self):
@@ -53,14 +82,33 @@ class WpaSupplicant:
             self.ctrl = None
             self.ifname = None
 
+    def get_ctrl_iface_port(self, ifname):
+        if self.hostname is None:
+            return None
+
+        res = self.global_request("INTERFACES ctrl")
+        lines = res.splitlines()
+        found = False
+        for line in lines:
+            words = line.split()
+            if words[0] == ifname:
+                found = True
+                break
+        if not found:
+            raise Exception("Could not find UDP port for " + ifname)
+        res = line.find("ctrl_iface=udp:")
+        if res == -1:
+            raise Exception("Wrong ctrl_interface format")
+        words = line.split(":")
+        return int(words[1])
+
     def interface_add(self, ifname, config="", driver="nl80211",
                       drv_params=None, br_ifname=None, create=False,
                       set_ifname=True, all_params=False, if_type=None):
-        try:
-            groups = subprocess.check_output(["id"])
-            group = "admin" if "(admin)" in groups else "adm"
-        except Exception, e:
+        status, groups = self.host.execute(["id"])
+        if status != 0:
             group = "admin"
+        group = "admin" if "(admin)" in groups else "adm"
         cmd = "INTERFACE_ADD " + ifname + "\t" + config + "\t" + driver + "\tDIR=/var/run/wpa_supplicant GROUP=" + group
         if drv_params:
             cmd = cmd + '\t' + drv_params
@@ -85,28 +133,50 @@ class WpaSupplicant:
         if "FAIL" in self.global_request(cmd):
             raise Exception("Failed to add a dynamic wpa_supplicant interface")
         if not create and set_ifname:
-            self.set_ifname(ifname)
+            port = self.get_ctrl_iface_port(ifname)
+            self.set_ifname(ifname, self.hostname, port)
+            res = self.get_driver_status()
+            if 'capa.flags' in res and int(res['capa.flags'], 0) & 0x20000000:
+                self.p2p_dev_ifname = 'p2p-dev-' + self.ifname
+            else:
+                self.p2p_dev_ifname = ifname
 
     def interface_remove(self, ifname):
         self.remove_ifname()
         self.global_request("INTERFACE_REMOVE " + ifname)
 
     def request(self, cmd, timeout=10):
-        logger.debug(self.ifname + ": CTRL: " + cmd)
+        logger.debug(self.dbg + ": CTRL: " + cmd)
         return self.ctrl.request(cmd, timeout=timeout)
 
     def global_request(self, cmd):
         if self.global_iface is None:
-            self.request(cmd)
+            return self.request(cmd)
         else:
             ifname = self.ifname or self.global_iface
-            logger.debug(ifname + ": CTRL(global): " + cmd)
+            logger.debug(self.global_dbg + ifname + ": CTRL(global): " + cmd)
             return self.global_ctrl.request(cmd)
+
+    @property
+    def group_dbg(self):
+        if self._group_dbg is not None:
+            return self._group_dbg
+        if self.group_ifname is None:
+            raise Exception("Cannot have group_dbg without group_ifname")
+        if self.hostname is None:
+            self._group_dbg = self.group_ifname
+        else:
+            self._group_dbg = self.hostname + "/" + self.group_ifname
+        return self._group_dbg
 
     def group_request(self, cmd):
         if self.group_ifname and self.group_ifname != self.ifname:
-            logger.debug(self.group_ifname + ": CTRL: " + cmd)
-            gctrl = wpaspy.Ctrl(os.path.join(wpas_ctrl, self.group_ifname))
+            if self.hostname is None:
+                gctrl = wpaspy.Ctrl(os.path.join(wpas_ctrl, self.group_ifname))
+            else:
+                port = self.get_ctrl_iface_port(self.group_ifname)
+                gctrl = wpaspy.Ctrl(self.hostname, port)
+            logger.debug(self.group_dbg + ": CTRL(group): " + cmd)
             return gctrl.request(cmd)
         return self.request(cmd)
 
@@ -148,18 +218,14 @@ class WpaSupplicant:
         if iter == 60:
             logger.error(self.ifname + ": Driver scan state did not clear")
             print "Trying to clear cfg80211/mac80211 scan state"
-            try:
-                cmd = ["ifconfig", self.ifname, "down"]
-                subprocess.call(cmd)
-            except subprocess.CalledProcessError, e:
-                logger.info("ifconfig failed: " + str(e.returncode))
-                logger.info(e.output)
-            try:
-                cmd = ["ifconfig", self.ifname, "up"]
-                subprocess.call(cmd)
-            except subprocess.CalledProcessError, e:
-                logger.info("ifconfig failed: " + str(e.returncode))
-                logger.info(e.output)
+            status, buf = self.host.execute(["ifconfig", self.ifname, "down"])
+            if status != 0:
+                logger.info("ifconfig failed: " + buf)
+                logger.info(status)
+            status, buf = self.host.execute(["ifconfig", self.ifname, "up"])
+            if status != 0:
+                logger.info("ifconfig failed: " + buf)
+                logger.info(status)
         if iter > 0:
             # The ongoing scan could have discovered BSSes or P2P peers
             logger.info("Run FLUSH again since scan was in progress")
@@ -197,6 +263,27 @@ class WpaSupplicant:
         res = self.request("SET_NETWORK " + str(id) + " " + field + ' "' + value + '"')
         if "FAIL" in res:
             raise Exception("SET_NETWORK failed")
+        return None
+
+    def p2pdev_request(self, cmd):
+        return self.global_request("IFNAME=" + self.p2p_dev_ifname + " " + cmd)
+
+    def p2pdev_add_network(self):
+        id = self.p2pdev_request("ADD_NETWORK")
+        if "FAIL" in id:
+            raise Exception("p2pdev ADD_NETWORK failed")
+        return int(id)
+
+    def p2pdev_set_network(self, id, field, value):
+        res = self.p2pdev_request("SET_NETWORK " + str(id) + " " + field + " " + value)
+        if "FAIL" in res:
+            raise Exception("p2pdev SET_NETWORK failed")
+        return None
+
+    def p2pdev_set_network_quoted(self, id, field, value):
+        res = self.p2pdev_request("SET_NETWORK " + str(id) + " " + field + ' "' + value + '"')
+        if "FAIL" in res:
+            raise Exception("p2pdev SET_NETWORK failed")
         return None
 
     def list_networks(self, p2p=False):
@@ -379,8 +466,8 @@ class WpaSupplicant:
         return None
 
     def get_mcc(self):
-	mcc = int(self.get_driver_status_field('capa.num_multichan_concurrent'))
-	return 1 if mcc < 2 else mcc
+        mcc = int(self.get_driver_status_field('capa.num_multichan_concurrent'))
+        return 1 if mcc < 2 else mcc
 
     def get_mib(self):
         res = self.request("MIB")
@@ -504,7 +591,12 @@ class WpaSupplicant:
         res['ifname'] = s[2]
         self.group_ifname = s[2]
         try:
-            self.gctrl_mon = wpaspy.Ctrl(os.path.join(wpas_ctrl, self.group_ifname))
+            if self.hostname is None:
+                self.gctrl_mon = wpaspy.Ctrl(os.path.join(wpas_ctrl,
+                                                          self.group_ifname))
+            else:
+                port = self.get_ctrl_iface_port(self.group_ifname)
+                self.gctrl_mon = wpaspy.Ctrl(self.hostname, port)
             self.gctrl_mon.attach()
         except:
             logger.debug("Could not open monitor socket for group interface")
@@ -599,7 +691,7 @@ class WpaSupplicant:
             cmd = "P2P_CONNECT " + peer + " " + pin + " " + method
         else:
             cmd = "P2P_CONNECT " + peer + " " + method
-        if go_intent:
+        if go_intent is not None:
             cmd = cmd + ' go_intent=' + str(go_intent)
         if freq:
             cmd = cmd + ' freq=' + str(freq)
@@ -645,7 +737,7 @@ class WpaSupplicant:
         while True:
             while self.mon.pending():
                 ev = self.mon.recv()
-                logger.debug(self.ifname + ": " + ev)
+                logger.debug(self.dbg + ": " + ev)
                 for event in events:
                     if event in ev:
                         return ev
@@ -665,7 +757,7 @@ class WpaSupplicant:
             while True:
                 while self.global_mon.pending():
                     ev = self.global_mon.recv()
-                    logger.debug(self.ifname + "(global): " + ev)
+                    logger.debug(self.global_dbg + self.ifname + "(global): " + ev)
                     for event in events:
                         if event in ev:
                             return ev
@@ -685,7 +777,7 @@ class WpaSupplicant:
             while True:
                 while self.gctrl_mon.pending():
                     ev = self.gctrl_mon.recv()
-                    logger.debug(self.group_ifname + ": " + ev)
+                    logger.debug(self.group_dbg + "(group): " + ev)
                     for event in events:
                         if event in ev:
                             return ev
@@ -717,11 +809,11 @@ class WpaSupplicant:
         count_global = 0
         while self.mon.pending():
             ev = self.mon.recv()
-            logger.debug(self.ifname + ": " + ev)
+            logger.debug(self.dbg + ": " + ev)
             count_iface += 1
         while self.global_mon and self.global_mon.pending():
             ev = self.global_mon.recv()
-            logger.debug(self.ifname + "(global): " + ev)
+            logger.debug(self.global_dbg + self.ifname + "(global): " + ev)
             count_global += 1
         return (count_iface, count_global)
 
@@ -900,7 +992,8 @@ class WpaSupplicant:
                        "disable_ht40", "disable_sgi", "disable_ldpc",
                        "ht40_intolerant", "update_identifier", "mac_addr",
                        "erp", "bg_scan_period", "bssid_blacklist",
-                       "bssid_whitelist", "mem_only_psk", "eap_workaround" ]
+                       "bssid_whitelist", "mem_only_psk", "eap_workaround",
+                       "engine" ]
         for field in not_quoted:
             if field in kwargs and kwargs[field]:
                 self.set_network(id, field, kwargs[field])
@@ -1031,7 +1124,7 @@ class WpaSupplicant:
         return res.split(' ')
 
     def get_bss(self, bssid, ifname=None):
-	if not ifname or ifname == self.ifname:
+        if not ifname or ifname == self.ifname:
             res = self.request("BSS " + bssid)
         elif ifname == self.group_ifname:
             res = self.group_request("BSS " + bssid)
@@ -1094,6 +1187,17 @@ class WpaSupplicant:
         if field != "freq":
             raise Exception("Unexpected MGMT-RX event format: " + ev)
         msg['freq'] = val
+
+        field,val = items[2].split('=')
+        if field != "datarate":
+            raise Exception("Unexpected MGMT-RX event format: " + ev)
+        msg['datarate'] = val
+
+        field,val = items[3].split('=')
+        if field != "ssi_signal":
+            raise Exception("Unexpected MGMT-RX event format: " + ev)
+        msg['ssi_signal'] = val
+
         frame = binascii.unhexlify(items[4])
         msg['frame'] = frame
 
@@ -1149,8 +1253,8 @@ class WpaSupplicant:
             cmd = "P2P_ASP_PROVISION_RESP"
             params = "status=%d" % status
 
-	if role is not None:
-	    params += " role=" + role
+        if role is not None:
+            params += " role=" + role
         if cpt is not None:
             params += " cpt=" + cpt
 

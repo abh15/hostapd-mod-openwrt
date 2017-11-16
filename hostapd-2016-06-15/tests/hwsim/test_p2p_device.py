@@ -27,6 +27,8 @@ def test_p2p_device_grpform(dev, apdev):
         wpas.dump_monitor()
         remove_group(dev[0], wpas)
         wpas.dump_monitor()
+        if not r_res['ifname'].startswith('p2p-' + iface):
+            raise Exception("Unexpected group ifname: " + r_res['ifname'])
 
         res = wpas.global_request("IFNAME=p2p-dev-" + iface + " STATUS-DRIVER")
         lines = res.splitlines()
@@ -53,6 +55,38 @@ def test_p2p_device_grpform2(dev, apdev):
         wpas.dump_monitor()
         remove_group(wpas, dev[0])
         wpas.dump_monitor()
+        if not i_res['ifname'].startswith('p2p-' + iface):
+            raise Exception("Unexpected group ifname: " + i_res['ifname'])
+
+def test_p2p_device_grpform_no_group_iface(dev, apdev):
+    """P2P group formation with driver using cfg80211 P2P Device but no separate group interface"""
+    with HWSimRadio(use_p2p_device=True) as (radio, iface):
+        wpas = WpaSupplicant(global_iface='/tmp/wpas-wlan5')
+        wpas.interface_add(iface)
+        wpas.global_request("SET p2p_no_group_iface 1")
+        [i_res, r_res] = go_neg_pin_authorized(i_dev=dev[0], i_intent=15,
+                                               r_dev=wpas, r_intent=0)
+        check_grpform_results(i_res, r_res)
+        wpas.dump_monitor()
+        remove_group(dev[0], wpas)
+        wpas.dump_monitor()
+        if r_res['ifname'] != iface:
+            raise Exception("Unexpected group ifname: " + r_res['ifname'])
+
+def test_p2p_device_grpform_no_group_iface2(dev, apdev):
+    """P2P group formation with driver using cfg80211 P2P Device but no separate group interface (reverse)"""
+    with HWSimRadio(use_p2p_device=True) as (radio, iface):
+        wpas = WpaSupplicant(global_iface='/tmp/wpas-wlan5')
+        wpas.interface_add(iface)
+        wpas.global_request("SET p2p_no_group_iface 1")
+        [i_res, r_res] = go_neg_pin_authorized(i_dev=wpas, i_intent=15,
+                                               r_dev=dev[0], r_intent=0)
+        check_grpform_results(i_res, r_res)
+        wpas.dump_monitor()
+        remove_group(dev[0], wpas)
+        wpas.dump_monitor()
+        if i_res['ifname'] != iface:
+            raise Exception("Unexpected group ifname: " + i_res['ifname'])
 
 def test_p2p_device_group_remove(dev, apdev):
     """P2P group removal via the P2P ctrl interface with driver using cfg80211 P2P Device"""
@@ -86,10 +120,18 @@ def test_p2p_device_concurrent_scan(dev, apdev):
             raise Exception("Station mode scan did not start")
 
 def test_p2p_device_nfc_invite(dev, apdev):
-    """P2P NFC invitiation with driver using cfg80211 P2P Device"""
+    """P2P NFC invitation with driver using cfg80211 P2P Device"""
+    run_p2p_device_nfc_invite(dev, apdev, 0)
+
+def test_p2p_device_nfc_invite_no_group_iface(dev, apdev):
+    """P2P NFC invitation with driver using cfg80211 P2P Device (no separate group interface)"""
+    run_p2p_device_nfc_invite(dev, apdev, 1)
+
+def run_p2p_device_nfc_invite(dev, apdev, no_group_iface):
     with HWSimRadio(use_p2p_device=True) as (radio, iface):
         wpas = WpaSupplicant(global_iface='/tmp/wpas-wlan5')
         wpas.interface_add(iface)
+        wpas.global_request("SET p2p_no_group_iface %d" % no_group_iface)
 
         set_ip_addr_info(dev[0])
         logger.info("Start autonomous GO")
@@ -127,7 +169,7 @@ def test_p2p_device_nfc_invite(dev, apdev):
 
 def test_p2p_device_misuses(dev, apdev):
     """cfg80211 P2P Device misuses"""
-    hapd = hostapd.add_ap(apdev[0]['ifname'], { "ssid": "open" })
+    hapd = hostapd.add_ap(apdev[0], { "ssid": "open" })
     with HWSimRadio(use_p2p_device=True) as (radio, iface):
         wpas = WpaSupplicant(global_iface='/tmp/wpas-wlan5')
         wpas.interface_add(iface)
@@ -326,3 +368,139 @@ def test_p2p_device_grpform_timeout_go(dev, apdev):
         del wpas
         if "p2p-" + iface + "-" in ifaces:
             raise Exception("Group interface still present after failure")
+
+def test_p2p_device_autogo(dev, apdev):
+    """P2P autogo using cfg80211 P2P Device"""
+    with HWSimRadio(use_p2p_device=True) as (radio, iface):
+        wpas = WpaSupplicant(global_iface='/tmp/wpas-wlan5')
+        wpas.interface_add(iface)
+
+        res = wpas.p2p_start_go()
+        if not res['ifname'].startswith('p2p-' + iface):
+            raise Exception("Unexpected group ifname: " + res['ifname'])
+        bssid = wpas.get_group_status_field('bssid')
+
+        dev[0].scan_for_bss(bssid, res['freq'])
+        connect_cli(wpas, dev[0], freq=res['freq'])
+        terminate_group(wpas, dev[0])
+
+def test_p2p_device_autogo_no_group_iface(dev, apdev):
+    """P2P autogo using cfg80211 P2P Device (no separate group interface)"""
+    with HWSimRadio(use_p2p_device=True) as (radio, iface):
+        wpas = WpaSupplicant(global_iface='/tmp/wpas-wlan5')
+        wpas.interface_add(iface)
+        wpas.global_request("SET p2p_no_group_iface 1")
+
+        res = wpas.p2p_start_go()
+        if res['ifname'] != iface:
+            raise Exception("Unexpected group ifname: " + res['ifname'])
+        bssid = wpas.get_group_status_field('bssid')
+
+        dev[0].scan_for_bss(bssid, res['freq'])
+        connect_cli(wpas, dev[0], freq=res['freq'])
+        terminate_group(wpas, dev[0])
+
+def test_p2p_device_join(dev, apdev):
+    """P2P join-group using cfg80211 P2P Device"""
+    with HWSimRadio(use_p2p_device=True) as (radio, iface):
+        wpas = WpaSupplicant(global_iface='/tmp/wpas-wlan5')
+        wpas.interface_add(iface)
+
+        res = dev[0].p2p_start_go()
+        bssid = dev[0].get_group_status_field('bssid')
+
+        wpas.scan_for_bss(bssid, res['freq'])
+        res2 = connect_cli(dev[0], wpas, freq=res['freq'])
+        if not res2['ifname'].startswith('p2p-' + iface):
+            raise Exception("Unexpected group ifname: " + res2['ifname'])
+
+        terminate_group(dev[0], wpas)
+
+def test_p2p_device_join_no_group_iface(dev, apdev):
+    """P2P join-group using cfg80211 P2P Device (no separate group interface)"""
+    with HWSimRadio(use_p2p_device=True) as (radio, iface):
+        wpas = WpaSupplicant(global_iface='/tmp/wpas-wlan5')
+        wpas.interface_add(iface)
+        wpas.global_request("SET p2p_no_group_iface 1")
+
+        res = dev[0].p2p_start_go()
+        bssid = dev[0].get_group_status_field('bssid')
+
+        wpas.scan_for_bss(bssid, res['freq'])
+        res2 = connect_cli(dev[0], wpas, freq=res['freq'])
+        if res2['ifname'] != iface:
+            raise Exception("Unexpected group ifname: " + res2['ifname'])
+
+        terminate_group(dev[0], wpas)
+
+def test_p2p_device_persistent_group(dev):
+    """P2P persistent group formation and re-invocation with cfg80211 P2P Device"""
+    with HWSimRadio(use_p2p_device=True) as (radio, iface):
+        wpas = WpaSupplicant(global_iface='/tmp/wpas-wlan5')
+        wpas.interface_add(iface)
+        wpas.global_request("SET p2p_no_group_iface 0")
+
+        form(dev[0], wpas)
+        invite_from_cli(dev[0], wpas)
+        invite_from_go(dev[0], wpas)
+
+def test_p2p_device_persistent_group_no_group_iface(dev):
+    """P2P persistent group formation and re-invocation with cfg80211 P2P Device (no separate group interface)"""
+    with HWSimRadio(use_p2p_device=True) as (radio, iface):
+        wpas = WpaSupplicant(global_iface='/tmp/wpas-wlan5')
+        wpas.interface_add(iface)
+        wpas.global_request("SET p2p_no_group_iface 1")
+
+        form(dev[0], wpas)
+        invite_from_cli(dev[0], wpas)
+        invite_from_go(dev[0], wpas)
+
+def test_p2p_device_persistent_group2(dev):
+    """P2P persistent group formation and re-invocation (reverse) with cfg80211 P2P Device"""
+    with HWSimRadio(use_p2p_device=True) as (radio, iface):
+        wpas = WpaSupplicant(global_iface='/tmp/wpas-wlan5')
+        wpas.interface_add(iface)
+        wpas.global_request("SET p2p_no_group_iface 0")
+
+        form(wpas, dev[0])
+        invite_from_cli(wpas, dev[0])
+        invite_from_go(wpas, dev[0])
+
+def test_p2p_device_persistent_group2_no_group_iface(dev):
+    """P2P persistent group formation and re-invocation (reverse) with cfg80211 P2P Device (no separate group interface)"""
+    with HWSimRadio(use_p2p_device=True) as (radio, iface):
+        wpas = WpaSupplicant(global_iface='/tmp/wpas-wlan5')
+        wpas.interface_add(iface)
+        wpas.global_request("SET p2p_no_group_iface 1")
+
+        form(wpas, dev[0])
+        invite_from_cli(wpas, dev[0])
+        invite_from_go(wpas, dev[0])
+
+def p2p_device_group_conf(dev1, dev2):
+    dev1.global_request("SET p2p_group_idle 12")
+    dev1.global_request("SET p2p_go_freq_change_policy 2")
+    dev1.global_request("SET p2p_go_ctwindow 7")
+
+    [i_res, r_res] = go_neg_pin_authorized(i_dev=dev1, i_intent=15,
+                                           r_dev=dev2, r_intent=0)
+    check_grpform_results(i_res, r_res)
+
+    if (dev1.group_request("GET p2p_group_idle") != "12" or
+        dev1.group_request("GET p2p_go_freq_change_policy") != "2" or
+        dev1.group_request("GET p2p_go_ctwindow") != "7"):
+        raise Exception("Unexpected configuration value")
+
+    remove_group(dev1, dev2)
+    dev1.global_request("P2P_FLUSH")
+    dev2.global_request("P2P_FLUSH")
+
+def test_p2p_device_conf(dev, apdev):
+    """P2P configuration with cfg80211 P2P Device"""
+    with HWSimRadio(use_p2p_device=True) as (radio, iface):
+        wpas = WpaSupplicant(global_iface='/tmp/wpas-wlan5')
+        wpas.interface_add(iface)
+        wpas.global_request("SET p2p_no_group_iface 1")
+        p2p_device_group_conf(wpas, dev[0])
+        wpas.global_request("SET p2p_no_group_iface 0")
+        p2p_device_group_conf(wpas, dev[0])

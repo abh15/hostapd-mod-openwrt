@@ -22,6 +22,7 @@
 #include "p2p_hostapd.h"
 #include "ctrl_iface_ap.h"
 #include "ap_drv_ops.h"
+#include "mbo_ap.h"
 
 
 static int hostapd_get_sta_tx_rx(struct hostapd_data *hapd,
@@ -35,9 +36,9 @@ static int hostapd_get_sta_tx_rx(struct hostapd_data *hapd,
 		return 0;
 
 	ret = os_snprintf(buf, buflen, "rx_packets=%lu\ntx_packets=%lu\n"
-			  "rx_bytes=%lu\ntx_bytes=%lu\n",
+			  "rx_bytes=%llu\ntx_bytes=%llu\ninactive_msec=%lu\n",
 			  data.rx_packets, data.tx_packets,
-			  data.rx_bytes, data.tx_bytes);
+			  data.rx_bytes, data.tx_bytes, data.inactive_msec);
 	if (os_snprintf_error(buflen, ret))
 		return 0;
 	return ret;
@@ -159,6 +160,19 @@ static int hostapd_ctrl_iface_sta_mib(struct hostapd_data *hapd,
 				  sta->vlan_id);
 		if (!os_snprintf_error(buflen - len, res))
 			len += res;
+	}
+
+	res = mbo_ap_get_info(sta, buf + len, buflen - len);
+	if (res >= 0)
+		len += res;
+
+	if (sta->supp_op_classes &&
+	    buflen - len > (unsigned) (17 + 2 * sta->supp_op_classes[0])) {
+		len += os_snprintf(buf + len, buflen - len, "supp_op_classes=");
+		len += wpa_snprintf_hex(buf + len, buflen - len,
+					sta->supp_op_classes + 1,
+					sta->supp_op_classes[0]);
+		len += os_snprintf(buf + len, buflen - len, "\n");
 	}
 
 	return len;
@@ -338,7 +352,10 @@ int hostapd_ctrl_iface_deauthenticate(struct hostapd_data *hapd,
 	}
 #endif /* CONFIG_P2P_MANAGER */
 
-	hostapd_drv_sta_deauth(hapd, addr, reason);
+	if (os_strstr(txtaddr, " tx=0"))
+		hostapd_drv_sta_remove(hapd, addr);
+	else
+		hostapd_drv_sta_deauth(hapd, addr, reason);
 	sta = ap_get_sta(hapd, addr);
 	if (sta)
 		ap_sta_deauthenticate(hapd, sta, reason);
@@ -398,13 +415,37 @@ int hostapd_ctrl_iface_disassociate(struct hostapd_data *hapd,
 	}
 #endif /* CONFIG_P2P_MANAGER */
 
-	hostapd_drv_sta_disassoc(hapd, addr, reason);
+	if (os_strstr(txtaddr, " tx=0"))
+		hostapd_drv_sta_remove(hapd, addr);
+	else
+		hostapd_drv_sta_disassoc(hapd, addr, reason);
 	sta = ap_get_sta(hapd, addr);
 	if (sta)
 		ap_sta_disassociate(hapd, sta, reason);
 	else if (addr[0] == 0xff)
 		hostapd_free_stas(hapd);
 
+	return 0;
+}
+
+
+int hostapd_ctrl_iface_poll_sta(struct hostapd_data *hapd,
+				const char *txtaddr)
+{
+	u8 addr[ETH_ALEN];
+	struct sta_info *sta;
+
+	wpa_dbg(hapd->msg_ctx, MSG_DEBUG, "CTRL_IFACE POLL_STA %s", txtaddr);
+
+	if (hwaddr_aton(txtaddr, addr))
+		return -1;
+
+	sta = ap_get_sta(hapd, addr);
+	if (!sta)
+		return -1;
+
+	hostapd_drv_poll_client(hapd, hapd->own_addr, addr,
+				sta->flags & WLAN_STA_WMM);
 	return 0;
 }
 
@@ -553,4 +594,17 @@ int hostapd_parse_csa_settings(const char *pos,
 int hostapd_ctrl_iface_stop_ap(struct hostapd_data *hapd)
 {
 	return hostapd_drv_stop_ap(hapd);
+}
+
+
+int hostapd_ctrl_iface_pmksa_list(struct hostapd_data *hapd, char *buf,
+				  size_t len)
+{
+	return wpa_auth_pmksa_list(hapd->wpa_auth, buf, len);
+}
+
+
+void hostapd_ctrl_iface_pmksa_flush(struct hostapd_data *hapd)
+{
+	wpa_auth_pmksa_flush(hapd->wpa_auth);
 }

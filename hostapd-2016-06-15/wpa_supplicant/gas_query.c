@@ -17,6 +17,7 @@
 #include "common/wpa_ctrl.h"
 #include "rsn_supp/wpa.h"
 #include "wpa_supplicant_i.h"
+#include "config.h"
 #include "driver_i.h"
 #include "offchannel.h"
 #include "gas_query.h"
@@ -273,6 +274,10 @@ static int gas_query_tx(struct gas_query *gas, struct gas_query_pending *query,
 			struct wpabuf *req, unsigned int wait_time)
 {
 	int res, prot = pmf_in_use(gas->wpa_s, query->addr);
+	const u8 *bssid;
+	const u8 wildcard_bssid[ETH_ALEN] = {
+		0xff, 0xff, 0xff, 0xff, 0xff, 0xff
+	};
 
 	wpa_printf(MSG_DEBUG, "GAS: Send action frame to " MACSTR " len=%u "
 		   "freq=%d prot=%d", MAC2STR(query->addr),
@@ -285,8 +290,15 @@ static int gas_query_tx(struct gas_query *gas, struct gas_query_pending *query,
 	if (gas->wpa_s->max_remain_on_chan &&
 	    wait_time > gas->wpa_s->max_remain_on_chan)
 		wait_time = gas->wpa_s->max_remain_on_chan;
+	if (!gas->wpa_s->conf->gas_address3 ||
+	    (gas->wpa_s->current_ssid &&
+	     gas->wpa_s->wpa_state >= WPA_ASSOCIATED &&
+	     os_memcmp(query->addr, gas->wpa_s->bssid, ETH_ALEN) == 0))
+		bssid = query->addr;
+	else
+		bssid = wildcard_bssid;
 	res = offchannel_send_action(gas->wpa_s, query->freq, query->addr,
-				     gas->wpa_s->own_addr, query->addr,
+				     gas->wpa_s->own_addr, bssid,
 				     wpabuf_head(req), wpabuf_len(req),
 				     wait_time, gas_query_tx_status, 0);
 	if (res == 0)
@@ -501,7 +513,7 @@ int gas_query_rx(struct gas_query *gas, const u8 *da, const u8 *sa,
 		return -1;
 
 	prot = categ == WLAN_ACTION_PROTECTED_DUAL;
-	pmf = pmf_in_use(gas->wpa_s, bssid);
+	pmf = pmf_in_use(gas->wpa_s, sa);
 	if (prot && !pmf) {
 		wpa_printf(MSG_DEBUG, "GAS: Drop unexpected protected GAS frame when PMF is disabled");
 		return 0;

@@ -55,6 +55,15 @@ def test_grpform_b(dev):
     if "p2p-wlan" not in r_res['ifname']:
         raise Exception("Unexpected group interface name")
     check_grpform_results(i_res, r_res)
+    addr = dev[0].group_request("P2P_GROUP_MEMBER " + dev[1].p2p_dev_addr())
+    if "FAIL" in addr:
+        raise Exception("P2P_GROUP_MEMBER failed")
+    if addr != dev[1].p2p_interface_addr():
+        raise Exception("Unexpected P2P_GROUP_MEMBER result: " + addr)
+    if "FAIL" not in dev[0].group_request("P2P_GROUP_MEMBER a"):
+        raise Exception("Invalid P2P_GROUP_MEMBER command accepted")
+    if "FAIL" not in dev[0].group_request("P2P_GROUP_MEMBER 00:11:22:33:44:55"):
+        raise Exception("P2P_GROUP_MEMBER for non-member accepted")
     remove_group(dev[0], dev[1])
     if r_res['ifname'] in utils.get_ifnames():
         raise Exception("Group interface netdev was not removed")
@@ -596,9 +605,8 @@ def test_go_neg_two_peers(dev):
     if "status=5" not in ev:
         raise Exception("Unexpected status code in rejection: " + ev)
 
-def clear_pbc_overlap(dev, ifname):
-    hapd_global = hostapd.HostapdGlobal()
-    hapd_global.remove(ifname)
+def clear_pbc_overlap(dev, ap):
+    hostapd.remove_bss(ap)
     dev[0].request("P2P_CANCEL")
     dev[1].request("P2P_CANCEL")
     dev[0].p2p_stop_find()
@@ -613,7 +621,7 @@ def clear_pbc_overlap(dev, ifname):
 def test_grpform_pbc_overlap(dev, apdev):
     """P2P group formation during PBC overlap"""
     params = { "ssid": "wps", "eap_server": "1", "wps_state": "1" }
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     hapd.request("WPS_PBC")
     time.sleep(0.1)
 
@@ -645,7 +653,7 @@ def test_grpform_pbc_overlap(dev, apdev):
     if ev is None:
         raise Exception("PBC overlap not reported")
 
-    clear_pbc_overlap(dev, apdev[0]['ifname'])
+    clear_pbc_overlap(dev, apdev[0])
 
 def test_grpform_pbc_overlap_group_iface(dev, apdev):
     """P2P group formation during PBC overlap using group interfaces"""
@@ -653,7 +661,7 @@ def test_grpform_pbc_overlap_group_iface(dev, apdev):
     # update use this information.
     params = { "ssid": "wps", "eap_server": "1", "wps_state": "1",
                "beacon_int": "15", 'manage_p2p': '1' }
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     hapd.request("WPS_PBC")
 
     dev[0].request("SET p2p_no_group_iface 0")
@@ -683,7 +691,7 @@ def test_grpform_pbc_overlap_group_iface(dev, apdev):
         # the group interface.
         logger.info("PBC overlap not reported")
 
-    clear_pbc_overlap(dev, apdev[0]['ifname'])
+    clear_pbc_overlap(dev, apdev[0])
 
 def test_grpform_goneg_fail_with_group_iface(dev):
     """P2P group formation fails while using group interface"""

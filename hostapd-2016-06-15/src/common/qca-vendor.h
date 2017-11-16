@@ -140,7 +140,11 @@ enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_CAC_ABORTED = 58,
 	QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_CAC_NOP_FINISHED = 59,
 	QCA_NL80211_VENDOR_SUBCMD_DFS_OFFLOAD_RADAR_DETECTED = 60,
-	/* 61-90 - reserved for QCA */
+	/* 61-73 - reserved for QCA */
+	/* Wi-Fi configuration subcommands */
+	QCA_NL80211_VENDOR_SUBCMD_SET_WIFI_CONFIGURATION = 74,
+	QCA_NL80211_VENDOR_SUBCMD_GET_WIFI_CONFIGURATION = 75,
+	/* 76-90 - reserved for QCA */
 	QCA_NL80211_VENDOR_SUBCMD_DATA_OFFLOAD = 91,
 	QCA_NL80211_VENDOR_SUBCMD_OCB_SET_CONFIG = 92,
 	QCA_NL80211_VENDOR_SUBCMD_OCB_SET_UTC_TIME = 93,
@@ -162,6 +166,9 @@ enum qca_nl80211_vendor_subcmds {
 	QCA_NL80211_VENDOR_SUBCMD_SET_TXPOWER_SCALE = 109,
 	/* 110..114 - reserved for QCA */
 	QCA_NL80211_VENDOR_SUBCMD_SET_TXPOWER_DECR_DB = 115,
+	/* 116..118 - reserved for QCA */
+	QCA_NL80211_VENDOR_SUBCMD_TSF = 119,
+	QCA_NL80211_VENDOR_SUBCMD_WISA = 120,
 };
 
 
@@ -334,6 +341,48 @@ enum qca_set_band {
 	QCA_SETBAND_2G,
 };
 
+/**
+ * enum qca_vendor_attr_get_tsf: Vendor attributes for TSF capture
+ * @QCA_WLAN_VENDOR_ATTR_TSF_CMD: enum qca_tsf_operation (u32)
+ * @QCA_WLAN_VENDOR_ATTR_TSF_TIMER_VALUE: Unsigned 64 bit TSF timer value
+ * @QCA_WLAN_VENDOR_ATTR_TSF_SOC_TIMER_VALUE: Unsigned 64 bit Synchronized
+ *	SOC timer value at TSF capture
+ */
+enum qca_vendor_attr_tsf_cmd {
+	QCA_WLAN_VENDOR_ATTR_TSF_INVALID = 0,
+	QCA_WLAN_VENDOR_ATTR_TSF_CMD,
+	QCA_WLAN_VENDOR_ATTR_TSF_TIMER_VALUE,
+	QCA_WLAN_VENDOR_ATTR_TSF_SOC_TIMER_VALUE,
+	QCA_WLAN_VENDOR_ATTR_TSF_AFTER_LAST,
+	QCA_WLAN_VENDOR_ATTR_TSF_MAX =
+	QCA_WLAN_VENDOR_ATTR_TSF_AFTER_LAST - 1
+};
+
+/**
+ * enum qca_tsf_operation: TSF driver commands
+ * @QCA_TSF_CAPTURE: Initiate TSF Capture
+ * @QCA_TSF_GET: Get TSF capture value
+ * @QCA_TSF_SYNC_GET: Initiate TSF capture and return with captured value
+ */
+enum qca_tsf_cmd {
+	QCA_TSF_CAPTURE,
+	QCA_TSF_GET,
+	QCA_TSF_SYNC_GET,
+};
+
+/**
+ * enum qca_vendor_attr_wisa_cmd
+ * @QCA_WLAN_VENDOR_ATTR_WISA_MODE: WISA mode value (u32)
+ * WISA setup vendor commands
+ */
+enum qca_vendor_attr_wisa_cmd {
+	QCA_WLAN_VENDOR_ATTR_WISA_INVALID = 0,
+	QCA_WLAN_VENDOR_ATTR_WISA_MODE,
+	QCA_WLAN_VENDOR_ATTR_WISA_AFTER_LAST,
+	QCA_WLAN_VENDOR_ATTR_WISA_MAX =
+	QCA_WLAN_VENDOR_ATTR_WISA_AFTER_LAST - 1
+};
+
 /* IEEE 802.11 Vendor Specific elements */
 
 /**
@@ -460,6 +509,60 @@ enum qca_vendor_attr_txpower_decr_db {
 	QCA_WLAN_VENDOR_ATTR_TXPOWER_DECR_DB_AFTER_LAST,
 	QCA_WLAN_VENDOR_ATTR_TXPOWER_DECR_DB_MAX =
 	QCA_WLAN_VENDOR_ATTR_TXPOWER_DECR_DB_AFTER_LAST - 1
+};
+
+/* Attributes for data used by
+ * QCA_NL80211_VENDOR_SUBCMD_SET_CONFIGURATION and
+ * QCA_NL80211_VENDOR_SUBCMD_GET_CONFIGURATION subcommands.
+ */
+enum qca_wlan_vendor_attr_config {
+	QCA_WLAN_VENDOR_ATTR_CONFIG_INVALID,
+	/* Unsigned 32-bit value to set the DTIM period.
+	 * Whether the wifi chipset wakes at every dtim beacon or a multiple of
+	 * the DTIM period. If DTIM is set to 3, the STA shall wake up every 3
+	 * DTIM beacons.
+	 */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_DYNAMIC_DTIM,
+	/* Unsigned 32-bit value to set the wifi_iface stats averaging factor
+	 * used to calculate statistics like average the TSF offset or average
+	 * number of frame leaked.
+	 * For instance, upon Beacon frame reception:
+	 * current_avg = ((beacon_TSF - TBTT) * factor + previous_avg * (0x10000 - factor) ) / 0x10000
+	 * For instance, when evaluating leaky APs:
+	 * current_avg = ((num frame received within guard time) * factor + previous_avg * (0x10000 - factor)) / 0x10000
+	 */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_STATS_AVG_FACTOR,
+	/* Unsigned 32-bit value to configure guard time, i.e., when
+	 * implementing IEEE power management based on frame control PM bit, how
+	 * long the driver waits before shutting down the radio and after
+	 * receiving an ACK frame for a Data frame with PM bit set.
+	 */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_GUARD_TIME,
+	/* Unsigned 32-bit value to change the FTM capability dynamically */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_FINE_TIME_MEASUREMENT,
+	/* Unsigned 16-bit value to configure maximum TX rate dynamically */
+	QCA_WLAN_VENDOR_ATTR_CONF_TX_RATE,
+	/* Unsigned 32-bit value to configure the number of continuous
+	 * Beacon Miss which shall be used by the firmware to penalize
+	 * the RSSI.
+	 */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_PENALIZE_AFTER_NCONS_BEACON_MISS,
+	/* Unsigned 8-bit value to configure the channel avoidance indication
+	 * behavior. Firmware to send only one indication and ignore duplicate
+	 * indications when set to avoid multiple Apps wakeups.
+	 */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_CHANNEL_AVOIDANCE_IND,
+	/* 8-bit unsigned value to configure the maximum TX MPDU for
+	 * aggregation. */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_TX_MPDU_AGGREGATION,
+	/* 8-bit unsigned value to configure the maximum RX MPDU for
+	 * aggregation. */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_RX_MPDU_AGGREGATION,
+
+	/* keep last */
+	QCA_WLAN_VENDOR_ATTR_CONFIG_AFTER_LAST,
+	QCA_WLAN_VENDOR_ATTR_CONFIG_MAX =
+	QCA_WLAN_VENDOR_ATTR_CONFIG_AFTER_LAST - 1,
 };
 
 #endif /* QCA_VENDOR_H */

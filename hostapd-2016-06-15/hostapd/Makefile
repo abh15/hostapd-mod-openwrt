@@ -27,10 +27,6 @@ CFLAGS += -I$(abspath ../src/utils)
 
 export BINDIR ?= /usr/local/bin/
 
-# Uncomment following line and set the path to your kernel tree include
-# directory if your C library does not include all header files.
-# CFLAGS += -DUSE_KERNEL_HEADERS -I/usr/src/linux/include
-
 -include .config
 
 ifndef CONFIG_NO_GITVER
@@ -88,6 +84,8 @@ OBJS += ../src/ap/pmksa_cache_auth.o
 OBJS += ../src/ap/ieee802_11_shared.o
 OBJS += ../src/ap/beacon.o
 OBJS += ../src/ap/bss_load.o
+OBJS += ../src/ap/neighbor_db.o
+OBJS += ../src/ap/rrm.o
 
 OBJS_c = hostapd_cli.o ../src/common/wpa_ctrl.o ../src/utils/os_$(CONFIG_OS).o
 
@@ -140,6 +138,10 @@ ifdef CONFIG_ELOOP_EPOLL
 CFLAGS += -DCONFIG_ELOOP_EPOLL
 endif
 
+ifdef CONFIG_ELOOP_KQUEUE
+CFLAGS += -DCONFIG_ELOOP_KQUEUE
+endif
+
 OBJS += ../src/utils/common.o
 OBJS_c += ../src/utils/common.o
 OBJS += ../src/utils/wpa_debug.o
@@ -190,22 +192,53 @@ ifdef CONFIG_NO_VLAN
 CFLAGS += -DCONFIG_NO_VLAN
 else
 OBJS += ../src/ap/vlan_init.o
-ifdef CONFIG_VLAN_NETLINK
+OBJS += ../src/ap/vlan_ifconfig.o
+OBJS += ../src/ap/vlan.o
 ifdef CONFIG_FULL_DYNAMIC_VLAN
+# Define CONFIG_FULL_DYNAMIC_VLAN to have hostapd manipulate bridges
+# and VLAN interfaces for the VLAN feature.
+CFLAGS += -DCONFIG_FULL_DYNAMIC_VLAN
+OBJS += ../src/ap/vlan_full.o
+ifdef CONFIG_VLAN_NETLINK
 OBJS += ../src/ap/vlan_util.o
+else
+OBJS += ../src/ap/vlan_ioctl.o
 endif
-CFLAGS += -DCONFIG_VLAN_NETLINK
 endif
 endif
 
 ifdef CONFIG_NO_CTRL_IFACE
 CFLAGS += -DCONFIG_NO_CTRL_IFACE
 else
+ifeq ($(CONFIG_CTRL_IFACE), udp)
+CFLAGS += -DCONFIG_CTRL_IFACE_UDP
+else
+ifeq ($(CONFIG_CTRL_IFACE), udp6)
+CFLAGS += -DCONFIG_CTRL_IFACE_UDP
+CFLAGS += -DCONFIG_CTRL_IFACE_UDP_IPV6
+else
+ifeq ($(CONFIG_CTRL_IFACE), udp-remote)
+CFLAGS += -DCONFIG_CTRL_IFACE_UDP
+CFLAGS += -DCONFIG_CTRL_IFACE_UDP_REMOTE
+else
+ifeq ($(CONFIG_CTRL_IFACE), udp6-remote)
+CFLAGS += -DCONFIG_CTRL_IFACE_UDP
+CFLAGS += -DCONFIG_CTRL_IFACE_UDP_REMOTE
+CFLAGS += -DCONFIG_CTRL_IFACE_UDP_IPV6
+else
+CFLAGS += -DCONFIG_CTRL_IFACE_UNIX
+endif
+endif
+endif
+endif
+OBJS += ../src/common/ctrl_iface_common.o
 OBJS += ctrl_iface.o
 OBJS += ../src/ap/ctrl_iface_ap.o
 endif
 
-CFLAGS += -DCONFIG_CTRL_IFACE -DCONFIG_CTRL_IFACE_UNIX
+ifndef CONFIG_NO_CTRL_IFACE
+CFLAGS += -DCONFIG_CTRL_IFACE
+endif
 
 ifdef CONFIG_IAPP
 CFLAGS += -DCONFIG_IAPP
@@ -275,6 +308,11 @@ endif
 
 ifdef CONFIG_IEEE80211AC
 CFLAGS += -DCONFIG_IEEE80211AC
+endif
+
+ifdef CONFIG_MBO
+CFLAGS += -DCONFIG_MBO
+OBJS += ../src/ap/mbo_ap.o
 endif
 
 include ../src/drivers/drivers.mak
@@ -871,12 +909,6 @@ endif
 
 ifdef CONFIG_DRIVER_RADIUS_ACL
 CFLAGS += -DCONFIG_DRIVER_RADIUS_ACL
-endif
-
-ifdef CONFIG_FULL_DYNAMIC_VLAN
-# define CONFIG_FULL_DYNAMIC_VLAN to have hostapd manipulate bridges
-# and vlan interfaces for the vlan feature.
-CFLAGS += -DCONFIG_FULL_DYNAMIC_VLAN
 endif
 
 ifdef NEED_BASE64

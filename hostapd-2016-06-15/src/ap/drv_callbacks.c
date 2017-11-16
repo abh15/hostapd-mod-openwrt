@@ -34,6 +34,7 @@
 #include "hw_features.h"
 #include "dfs.h"
 #include "beacon.h"
+#include "mbo_ap.h"
 
 
 int hostapd_notif_assoc(struct hostapd_data *hapd, const u8 *addr,
@@ -172,6 +173,11 @@ int hostapd_notif_assoc(struct hostapd_data *hapd, const u8 *addr,
 	else
 		sta->mb_ies = NULL;
 #endif /* CONFIG_FST */
+
+	mbo_ap_check_sta_assoc(hapd, sta, &elems);
+
+	ap_copy_sta_supp_op_classes(sta, elems.supp_op_classes,
+				    elems.supp_op_classes_len);
 
 	if (hapd->conf->wpa) {
 		if (ie == NULL || ielen == 0) {
@@ -347,6 +353,17 @@ int hostapd_notif_assoc(struct hostapd_data *hapd, const u8 *addr,
 			return WLAN_STATUS_INVALID_IE;
 #endif /* CONFIG_HS20 */
 	}
+
+#ifdef CONFIG_MBO
+	if (hapd->conf->mbo_enabled && (hapd->conf->wpa & 2) &&
+	    elems.mbo && sta->cell_capa && !(sta->flags & WLAN_STA_MFP) &&
+	    hapd->conf->ieee80211w != NO_MGMT_FRAME_PROTECTION) {
+		wpa_printf(MSG_INFO,
+			   "MBO: Reject WPA2 association without PMF");
+		return WLAN_STATUS_UNSPECIFIED_FAILURE;
+	}
+#endif /* CONFIG_MBO */
+
 #ifdef CONFIG_WPS
 skip_wpa_check:
 #endif /* CONFIG_WPS */
@@ -553,6 +570,7 @@ void hostapd_acs_channel_selected(struct hostapd_data *hapd,
 				  struct acs_selected_channels *acs_res)
 {
 	int ret, i;
+	int err = 0;
 
 	if (hapd->iconf->channel) {
 		wpa_printf(MSG_INFO, "ACS: Channel was already set to %d",
@@ -574,7 +592,8 @@ void hostapd_acs_channel_selected(struct hostapd_data *hapd,
 			hostapd_logger(hapd, NULL, HOSTAPD_MODULE_IEEE80211,
 				       HOSTAPD_LEVEL_WARNING,
 				       "driver selected to bad hw_mode");
-			return;
+			err = 1;
+			goto out;
 		}
 	}
 
@@ -584,7 +603,8 @@ void hostapd_acs_channel_selected(struct hostapd_data *hapd,
 		hostapd_logger(hapd, NULL, HOSTAPD_MODULE_IEEE80211,
 			       HOSTAPD_LEVEL_WARNING,
 			       "driver switched to bad channel");
-		return;
+		err = 1;
+		goto out;
 	}
 
 	hapd->iconf->channel = acs_res->pri_channel;
@@ -598,7 +618,8 @@ void hostapd_acs_channel_selected(struct hostapd_data *hapd,
 		hapd->iconf->secondary_channel = 1;
 	else {
 		wpa_printf(MSG_ERROR, "Invalid secondary channel!");
-		return;
+		err = 1;
+		goto out;
 	}
 
 	if (hapd->iface->conf->ieee80211ac) {
@@ -627,7 +648,8 @@ void hostapd_acs_channel_selected(struct hostapd_data *hapd,
 		}
 	}
 
-	ret = hostapd_acs_completed(hapd->iface, 0);
+out:
+	ret = hostapd_acs_completed(hapd->iface, err);
 	if (ret) {
 		wpa_printf(MSG_ERROR,
 			   "ACS: Possibly channel configuration is invalid");
@@ -894,11 +916,24 @@ static void hostapd_mgmt_tx_cb(struct hostapd_data *hapd, const u8 *buf,
 			       size_t len, u16 stype, int ok)
 {
 	struct ieee80211_hdr *hdr;
+	struct hostapd_data *orig_hapd = hapd;
 
 	hdr = (struct ieee80211_hdr *) buf;
 	hapd = get_hapd_bssid(hapd->iface, get_hdr_bssid(hdr, len));
-	if (hapd == NULL || hapd == HAPD_BROADCAST)
+	if (!hapd)
 		return;
+	if (hapd == HAPD_BROADCAST) {
+		if (stype != WLAN_FC_STYPE_ACTION || len <= 25 ||
+		    buf[24] != WLAN_ACTION_PUBLIC)
+			return;
+		hapd = get_hapd_bssid(orig_hapd->iface, hdr->addr2);
+		if (!hapd || hapd == HAPD_BROADCAST)
+			return;
+		/*
+		 * Allow processing of TX status for a Public Action frame that
+		 * used wildcard BBSID.
+		 */
+	}
 	ieee802_11_mgmt_cb(hapd, buf, len, stype, ok);
 }
 
@@ -1329,6 +1364,33 @@ void wpa_supplicant_event(void *ctx, enum wpa_event_type event,
 		wpa_printf(MSG_DEBUG, "Unknown event %d", event);
 		break;
 	}
+}
+
+
+void wpa_supplicant_event_global(void *ctx, enum wpa_event_type event,
+				 union wpa_event_data *data)
+{
+	struct hapd_interfaces *interfaces = ctx;
+	struct hostapd_data *hapd;
+
+	if (event != EVENT_INTERFACE_STATUS)
+		return;
+
+	hapd = hostapd_get_iface(interfaces, data->interface_status.ifname);
+	if (hapd && hapd->driver && hapd->driver->get_ifindex &&
+	    hapd->drv_priv) {
+		unsigned int ifindex;
+
+		ifindex = hapd->driver->get_ifindex(hapd->drv_priv);
+		if (ifindex != data->interface_status.ifindex) {
+			wpa_dbg(hapd->msg_ctx, MSG_DEBUG,
+				"interface status ifindex %d mismatch (%d)",
+				ifindex, data->interface_status.ifindex);
+			return;
+		}
+	}
+	if (hapd)
+		wpa_supplicant_event(hapd, event, data);
 }
 
 #endif /* HOSTAPD */

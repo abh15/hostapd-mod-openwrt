@@ -17,3 +17,6 @@ src/ap/ieee802_11.c
 
 hostapd/main.c
 
+Files added-
+
+src/ap/read_conf_global.h

@@ -13,18 +13,18 @@ import hwsim_utils
 import hostapd
 from wlantest import Wlantest
 from wpasupplicant import WpaSupplicant
-from test_ap_eap import eap_connect
 
 def test_ap_pmf_required(dev, apdev):
     """WPA2-PSK AP with PMF required"""
     ssid = "test-pmf-required"
-    wt = Wlantest()
-    wt.flush()
-    wt.add_passphrase("12345678")
     params = hostapd.wpa2_params(ssid=ssid, passphrase="12345678")
     params["wpa_key_mgmt"] = "WPA-PSK-SHA256";
     params["ieee80211w"] = "2";
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
+    Wlantest.setup(hapd)
+    wt = Wlantest()
+    wt.flush()
+    wt.add_passphrase("12345678")
     key_mgmt = hapd.get_config()['key_mgmt']
     if key_mgmt.split(' ')[0] != "WPA-PSK-SHA256":
         raise Exception("Unexpected GET_CONFIG(key_mgmt): " + key_mgmt)
@@ -38,7 +38,6 @@ def test_ap_pmf_required(dev, apdev):
                    key_mgmt="WPA-PSK WPA-PSK-SHA256", proto="WPA2",
                    scan_freq="2412")
     hwsim_utils.test_connectivity(dev[1], hapd)
-    hapd = hostapd.Hostapd(apdev[0]['ifname'])
     hapd.request("SA_QUERY " + dev[0].p2p_interface_addr())
     hapd.request("SA_QUERY " + dev[1].p2p_interface_addr())
     wt.require_ap_pmf_mandatory(apdev[0]['bssid'])
@@ -55,13 +54,14 @@ def test_ap_pmf_required(dev, apdev):
 def test_ap_pmf_optional(dev, apdev):
     """WPA2-PSK AP with PMF optional"""
     ssid = "test-pmf-optional"
-    wt = Wlantest()
-    wt.flush()
-    wt.add_passphrase("12345678")
     params = hostapd.wpa2_params(ssid=ssid, passphrase="12345678")
     params["wpa_key_mgmt"] = "WPA-PSK";
     params["ieee80211w"] = "1";
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
+    Wlantest.setup(hapd)
+    wt = Wlantest()
+    wt.flush()
+    wt.add_passphrase("12345678")
     dev[0].connect(ssid, psk="12345678", ieee80211w="1",
                    key_mgmt="WPA-PSK WPA-PSK-SHA256", proto="WPA2",
                    scan_freq="2412")
@@ -77,13 +77,14 @@ def test_ap_pmf_optional(dev, apdev):
 def test_ap_pmf_optional_2akm(dev, apdev):
     """WPA2-PSK AP with PMF optional (2 AKMs)"""
     ssid = "test-pmf-optional-2akm"
-    wt = Wlantest()
-    wt.flush()
-    wt.add_passphrase("12345678")
     params = hostapd.wpa2_params(ssid=ssid, passphrase="12345678")
     params["wpa_key_mgmt"] = "WPA-PSK WPA-PSK-SHA256";
     params["ieee80211w"] = "1";
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
+    Wlantest.setup(hapd)
+    wt = Wlantest()
+    wt.flush()
+    wt.add_passphrase("12345678")
     dev[0].connect(ssid, psk="12345678", ieee80211w="1",
                    key_mgmt="WPA-PSK WPA-PSK-SHA256", proto="WPA2",
                    scan_freq="2412")
@@ -103,11 +104,12 @@ def test_ap_pmf_optional_2akm(dev, apdev):
 def test_ap_pmf_negative(dev, apdev):
     """WPA2-PSK AP without PMF (negative test)"""
     ssid = "test-pmf-negative"
+    params = hostapd.wpa2_params(ssid=ssid, passphrase="12345678")
+    hapd = hostapd.add_ap(apdev[0], params)
+    Wlantest.setup(hapd)
     wt = Wlantest()
     wt.flush()
     wt.add_passphrase("12345678")
-    params = hostapd.wpa2_params(ssid=ssid, passphrase="12345678")
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
     dev[0].connect(ssid, psk="12345678", ieee80211w="1",
                    key_mgmt="WPA-PSK WPA-PSK-SHA256", proto="WPA2",
                    scan_freq="2412")
@@ -125,13 +127,14 @@ def test_ap_pmf_negative(dev, apdev):
 def test_ap_pmf_assoc_comeback(dev, apdev):
     """WPA2-PSK AP with PMF association comeback"""
     ssid = "assoc-comeback"
-    wt = Wlantest()
-    wt.flush()
-    wt.add_passphrase("12345678")
     params = hostapd.wpa2_params(ssid=ssid, passphrase="12345678")
     params["wpa_key_mgmt"] = "WPA-PSK-SHA256";
     params["ieee80211w"] = "2";
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
+    Wlantest.setup(hapd)
+    wt = Wlantest()
+    wt.flush()
+    wt.add_passphrase("12345678")
     dev[0].connect(ssid, psk="12345678", ieee80211w="1",
                    key_mgmt="WPA-PSK WPA-PSK-SHA256", proto="WPA2",
                    scan_freq="2412")
@@ -148,13 +151,14 @@ def test_ap_pmf_assoc_comeback(dev, apdev):
 def test_ap_pmf_assoc_comeback2(dev, apdev):
     """WPA2-PSK AP with PMF association comeback (using DROP_SA)"""
     ssid = "assoc-comeback"
-    wt = Wlantest()
-    wt.flush()
-    wt.add_passphrase("12345678")
     params = hostapd.wpa2_params(ssid=ssid, passphrase="12345678")
     params["wpa_key_mgmt"] = "WPA-PSK";
     params["ieee80211w"] = "1";
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
+    Wlantest.setup(hapd)
+    wt = Wlantest()
+    wt.flush()
+    wt.add_passphrase("12345678")
     dev[0].connect(ssid, psk="12345678", ieee80211w="2",
                    key_mgmt="WPA-PSK", proto="WPA2", scan_freq="2412")
     if "OK" not in dev[0].request("DROP_SA"):
@@ -169,9 +173,6 @@ def test_ap_pmf_sta_sa_query(dev, apdev):
     """WPA2-PSK AP with station using SA Query"""
     ssid = "assoc-comeback"
     addr = dev[0].own_addr()
-    wt = Wlantest()
-    wt.flush()
-    wt.add_passphrase("12345678")
 
     wpas = WpaSupplicant(global_iface='/tmp/wpas-wlan5')
     wpas.interface_add("wlan5", drv_params="use_monitor=1")
@@ -188,6 +189,11 @@ def test_ap_pmf_sta_sa_query(dev, apdev):
     wpas.connect_network(id)
     bssid = wpas.own_addr()
     wpas.dump_monitor()
+
+    Wlantest.setup(wpas)
+    wt = Wlantest()
+    wt.flush()
+    wt.add_passphrase("12345678")
 
     dev[0].connect(ssid, psk="12345678", ieee80211w="1",
                    key_mgmt="WPA-PSK WPA-PSK-SHA256", proto="WPA2",
@@ -262,9 +268,6 @@ def test_ap_pmf_sta_unprot_deauth_burst(dev, apdev):
     """WPA2-PSK AP with station receiving burst of unprotected Deauthentication frames"""
     ssid = "deauth-attack"
     addr = dev[0].own_addr()
-    wt = Wlantest()
-    wt.flush()
-    wt.add_passphrase("12345678")
 
     wpas = WpaSupplicant(global_iface='/tmp/wpas-wlan5')
     wpas.interface_add("wlan5", drv_params="use_monitor=1")
@@ -280,6 +283,11 @@ def test_ap_pmf_sta_unprot_deauth_burst(dev, apdev):
     wpas.set_network(id, "frequency", "2412")
     wpas.connect_network(id)
     bssid = wpas.own_addr()
+
+    Wlantest.setup(wpas)
+    wt = Wlantest()
+    wt.flush()
+    wt.add_passphrase("12345678")
 
     dev[0].connect(ssid, psk="12345678", ieee80211w="1",
                    key_mgmt="WPA-PSK WPA-PSK-SHA256", proto="WPA2",
@@ -318,7 +326,7 @@ def test_ap_pmf_required_eap(dev, apdev):
     params = hostapd.wpa2_eap_params(ssid=ssid)
     params["wpa_key_mgmt"] = "WPA-EAP-SHA256";
     params["ieee80211w"] = "2";
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     key_mgmt = hapd.get_config()['key_mgmt']
     if key_mgmt.split(' ')[0] != "WPA-EAP-SHA256":
         raise Exception("Unexpected GET_CONFIG(key_mgmt): " + key_mgmt)
@@ -335,7 +343,7 @@ def test_ap_pmf_optional_eap(dev, apdev):
     """WPA2EAP AP with PMF optional"""
     params = hostapd.wpa2_eap_params(ssid="test-wpa2-eap")
     params["ieee80211w"] = "1";
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
     dev[0].connect("test-wpa2-eap", key_mgmt="WPA-EAP", eap="TTLS",
                    identity="pap user", anonymous_identity="ttls",
                    password="password",
@@ -350,13 +358,14 @@ def test_ap_pmf_optional_eap(dev, apdev):
 def test_ap_pmf_required_sha1(dev, apdev):
     """WPA2-PSK AP with PMF required with SHA1 AKM"""
     ssid = "test-pmf-required-sha1"
-    wt = Wlantest()
-    wt.flush()
-    wt.add_passphrase("12345678")
     params = hostapd.wpa2_params(ssid=ssid, passphrase="12345678")
     params["wpa_key_mgmt"] = "WPA-PSK";
     params["ieee80211w"] = "2";
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
+    Wlantest.setup(hapd)
+    wt = Wlantest()
+    wt.flush()
+    wt.add_passphrase("12345678")
     key_mgmt = hapd.get_config()['key_mgmt']
     if key_mgmt.split(' ')[0] != "WPA-PSK":
         raise Exception("Unexpected GET_CONFIG(key_mgmt): " + key_mgmt)
@@ -375,15 +384,16 @@ def test_ap_pmf_toggle(dev, apdev):
 
 def _test_ap_pmf_toggle(dev, apdev):
     ssid = "test-pmf-optional"
-    wt = Wlantest()
-    wt.flush()
-    wt.add_passphrase("12345678")
     params = hostapd.wpa2_params(ssid=ssid, passphrase="12345678")
     params["wpa_key_mgmt"] = "WPA-PSK";
     params["ieee80211w"] = "1";
     params["assoc_sa_query_max_timeout"] = "1"
     params["assoc_sa_query_retry_timeout"] = "1"
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
+    Wlantest.setup(hapd)
+    wt = Wlantest()
+    wt.flush()
+    wt.add_passphrase("12345678")
     bssid = apdev[0]['bssid']
     addr = dev[0].own_addr()
     dev[0].request("SET reassoc_same_bss_optim 1")
@@ -428,7 +438,7 @@ def test_ap_pmf_required_sta_no_pmf(dev, apdev):
     params = hostapd.wpa2_params(ssid=ssid, passphrase="12345678")
     params["wpa_key_mgmt"] = "WPA-PSK-SHA256";
     params["ieee80211w"] = "2";
-    hapd = hostapd.add_ap(apdev[0]['ifname'], params)
+    hapd = hostapd.add_ap(apdev[0], params)
 
     # Disable PMF on the station and try to connect
     dev[0].connect(ssid, psk="12345678", ieee80211w="0",

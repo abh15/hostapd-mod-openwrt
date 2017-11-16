@@ -202,13 +202,6 @@ int hostapd_mac_comp(const void *a, const void *b)
 }
 
 
-int hostapd_mac_comp_empty(const void *a)
-{
-	macaddr empty = { 0 };
-	return os_memcmp(a, empty, sizeof(macaddr));
-}
-
-
 static int hostapd_config_read_wpa_psk(const char *fname,
 				       struct hostapd_ssid *ssid)
 {
@@ -574,6 +567,7 @@ void hostapd_config_free_bss(struct hostapd_bss_config *conf)
 #endif /* CONFIG_HS20 */
 
 	wpabuf_free(conf->vendor_elements);
+	wpabuf_free(conf->assocresp_elements);
 
 	os_free(conf->sae_groups);
 
@@ -613,6 +607,8 @@ void hostapd_config_free(struct hostapd_config *conf)
 #ifdef CONFIG_ACS
 	os_free(conf->acs_chan_bias);
 #endif /* CONFIG_ACS */
+	wpabuf_free(conf->lci);
+	wpabuf_free(conf->civic);
 
 	os_free(conf);
 }
@@ -629,7 +625,7 @@ void hostapd_config_free(struct hostapd_config *conf)
  * Perform a binary search for given MAC address from a pre-sorted list.
  */
 int hostapd_maclist_found(struct mac_acl_entry *list, int num_entries,
-			  const u8 *addr, int *vlan_id)
+			  const u8 *addr, struct vlan_description *vlan_id)
 {
 	int start, end, middle, res;
 
@@ -669,11 +665,26 @@ int hostapd_rate_found(int *list, int rate)
 }
 
 
-int hostapd_vlan_id_valid(struct hostapd_vlan *vlan, int vlan_id)
+int hostapd_vlan_valid(struct hostapd_vlan *vlan,
+		       struct vlan_description *vlan_desc)
 {
 	struct hostapd_vlan *v = vlan;
+	int i;
+
+	if (!vlan_desc->notempty || vlan_desc->untagged < 0 ||
+	    vlan_desc->untagged > MAX_VLAN_ID)
+		return 0;
+	for (i = 0; i < MAX_NUM_TAGGED_VLAN; i++) {
+		if (vlan_desc->tagged[i] < 0 ||
+		    vlan_desc->tagged[i] > MAX_VLAN_ID)
+			return 0;
+	}
+	if (!vlan_desc->untagged && !vlan_desc->tagged[0])
+		return 0;
+
 	while (v) {
-		if (v->vlan_id == vlan_id || v->vlan_id == VLAN_ID_WILDCARD)
+		if (!vlan_compare(&v->vlan_desc, vlan_desc) ||
+		    v->vlan_id == VLAN_ID_WILDCARD)
 			return 1;
 		v = v->next;
 	}
@@ -775,7 +786,7 @@ static int hostapd_config_check_bss(struct hostapd_bss_config *bss,
 		return -1;
 	}
 
-	if (full_config && hostapd_mac_comp_empty(bss->bssid) != 0) {
+	if (full_config && !is_zero_ether_addr(bss->bssid)) {
 		size_t i;
 
 		for (i = 0; i < conf->num_bss; i++) {
@@ -865,6 +876,15 @@ static int hostapd_config_check_bss(struct hostapd_bss_config *bss,
 		return -1;
 	}
 #endif /* CONFIG_HS20 */
+
+#ifdef CONFIG_MBO
+	if (full_config && bss->mbo_enabled && (bss->wpa & 2) &&
+	    bss->ieee80211w == NO_MGMT_FRAME_PROTECTION) {
+		wpa_printf(MSG_ERROR,
+			   "MBO: PMF needs to be enabled whenever using WPA2 with MBO");
+		return -1;
+	}
+#endif /* CONFIG_MBO */
 
 	return 0;
 }

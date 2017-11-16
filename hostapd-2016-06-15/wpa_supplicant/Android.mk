@@ -65,7 +65,6 @@ INCLUDES += $(LOCAL_PATH)/src/rsn_supp
 INCLUDES += $(LOCAL_PATH)/src/tls
 INCLUDES += $(LOCAL_PATH)/src/utils
 INCLUDES += $(LOCAL_PATH)/src/wps
-INCLUDES += external/openssl/include
 INCLUDES += system/security/keystore/include
 ifdef CONFIG_DRIVER_NL80211
 ifneq ($(wildcard external/libnl),)
@@ -270,6 +269,7 @@ endif
 ifdef CONFIG_IBSS_RSN
 NEED_RSN_AUTHENTICATOR=y
 L_CFLAGS += -DCONFIG_IBSS_RSN
+L_CFLAGS += -DCONFIG_NO_VLAN
 OBJS += ibss_rsn.c
 endif
 
@@ -797,6 +797,8 @@ OBJS += src/ap/ap_drv_ops.c
 OBJS += src/ap/beacon.c
 OBJS += src/ap/bss_load.c
 OBJS += src/ap/eap_user_db.c
+OBJS += src/ap/neighbor_db.c
+OBJS += src/ap/rrm.c
 ifdef CONFIG_IEEE80211N
 OBJS += src/ap/ieee802_11_ht.c
 ifdef CONFIG_IEEE80211AC
@@ -805,6 +807,9 @@ endif
 endif
 ifdef CONFIG_WNM
 OBJS += src/ap/wnm_ap.c
+endif
+ifdef CONFIG_MBO
+OBJS += src/ap/mbo_ap.c
 endif
 ifdef CONFIG_CTRL_IFACE
 OBJS += src/ap/ctrl_iface_ap.c
@@ -820,6 +825,11 @@ L_CFLAGS += -DCONFIG_IEEE80211N
 ifdef CONFIG_IEEE80211AC
 L_CFLAGS += -DCONFIG_IEEE80211AC
 endif
+endif
+
+ifdef CONFIG_MBO
+OBJS += mbo.c
+L_CFLAGS += -DCONFIG_MBO
 endif
 
 ifdef NEED_AP_MLME
@@ -1284,6 +1294,7 @@ endif
 L_CFLAGS += -DCONFIG_CTRL_IFACE
 ifeq ($(CONFIG_CTRL_IFACE), unix)
 L_CFLAGS += -DCONFIG_CTRL_IFACE_UNIX
+OBJS += src/common/ctrl_iface_common.c
 endif
 ifeq ($(CONFIG_CTRL_IFACE), udp)
 L_CFLAGS += -DCONFIG_CTRL_IFACE_UDP
@@ -1336,6 +1347,16 @@ endif
 
 OBJS += $(DBUS_OBJS)
 L_CFLAGS += $(DBUS_CFLAGS)
+
+ifdef CONFIG_CTRL_IFACE_BINDER
+BINDER=y
+L_CFLAGS += -DCONFIG_BINDER -DCONFIG_CTRL_IFACE_BINDER
+OBJS += binder/binder.cpp binder/binder_manager.cpp
+OBJS += binder/supplicant.cpp binder/iface.cpp
+OBJS += binder/fi/w1/wpa_supplicant/ISupplicant.aidl
+OBJS += binder/fi/w1/wpa_supplicant/ISupplicantCallbacks.aidl
+OBJS += binder/fi/w1/wpa_supplicant/IIface.aidl
+endif
 
 ifdef CONFIG_READLINE
 OBJS_c += src/utils/edit_readline.c
@@ -1573,6 +1594,10 @@ LOCAL_SRC_FILES := $(OBJS)
 LOCAL_C_INCLUDES := $(INCLUDES)
 ifeq ($(DBUS), y)
 LOCAL_SHARED_LIBRARIES += libdbus
+endif
+ifeq ($(BINDER), y)
+LOCAL_AIDL_INCLUDES := $(LOCAL_PATH)/binder frameworks/native/aidl/binder
+LOCAL_SHARED_LIBRARIES += libutils libbinder
 endif
 include $(BUILD_EXECUTABLE)
 

@@ -352,13 +352,20 @@ static void wiphy_info_ext_feature_flags(struct wiphy_info_data *info,
 					 struct nlattr *tb)
 {
 	struct wpa_driver_capa *capa = info->capa;
+	u8 *ext_features;
+	int len;
 
 	if (tb == NULL)
 		return;
 
-	if (ext_feature_isset(nla_data(tb), nla_len(tb),
-			      NL80211_EXT_FEATURE_VHT_IBSS))
+	ext_features = nla_data(tb);
+	len = nla_len(tb);
+
+	if (ext_feature_isset(ext_features, len, NL80211_EXT_FEATURE_VHT_IBSS))
 		capa->flags |= WPA_DRIVER_FLAGS_VHT_IBSS;
+
+	if (ext_feature_isset(ext_features, len, NL80211_EXT_FEATURE_RRM))
+		capa->rrm_flags |= WPA_DRIVER_FLAGS_SUPPORT_RRM;
 }
 
 
@@ -428,6 +435,9 @@ static void wiphy_info_feature_flags(struct wiphy_info_data *info,
 
 	if (flags & NL80211_FEATURE_HT_IBSS)
 		capa->flags |= WPA_DRIVER_FLAGS_HT_IBSS;
+
+	if (flags & NL80211_FEATURE_FULL_AP_CLIENT_STATE)
+		capa->flags |= WPA_DRIVER_FLAGS_FULL_AP_CLIENT_STATE;
 }
 
 
@@ -473,6 +483,74 @@ static void wiphy_info_wowlan_triggers(struct wpa_driver_capa *capa,
 		capa->wowlan_triggers.four_way_handshake = 1;
 	if (triggers[NL80211_WOWLAN_TRIG_RFKILL_RELEASE])
 		capa->wowlan_triggers.rfkill_release = 1;
+}
+
+
+static void wiphy_info_extended_capab(struct wpa_driver_nl80211_data *drv,
+				      struct nlattr *tb)
+{
+	int rem = 0, i;
+	struct nlattr *tb1[NL80211_ATTR_MAX + 1], *attr;
+
+	if (!tb || drv->num_iface_ext_capa == NL80211_IFTYPE_MAX)
+		return;
+
+	nla_for_each_nested(attr, tb, rem) {
+		unsigned int len;
+		struct drv_nl80211_ext_capa *capa;
+
+		nla_parse(tb1, NL80211_ATTR_MAX, nla_data(attr),
+			  nla_len(attr), NULL);
+
+		if (!tb1[NL80211_ATTR_IFTYPE] ||
+		    !tb1[NL80211_ATTR_EXT_CAPA] ||
+		    !tb1[NL80211_ATTR_EXT_CAPA_MASK])
+			continue;
+
+		capa = &drv->iface_ext_capa[drv->num_iface_ext_capa];
+		capa->iftype = nla_get_u32(tb1[NL80211_ATTR_IFTYPE]);
+		wpa_printf(MSG_DEBUG,
+			   "nl80211: Driver-advertised extended capabilities for interface type %s",
+			   nl80211_iftype_str(capa->iftype));
+
+		len = nla_len(tb1[NL80211_ATTR_EXT_CAPA]);
+		capa->ext_capa = os_malloc(len);
+		if (!capa->ext_capa)
+			goto err;
+
+		os_memcpy(capa->ext_capa, nla_data(tb1[NL80211_ATTR_EXT_CAPA]),
+			  len);
+		capa->ext_capa_len = len;
+		wpa_hexdump(MSG_DEBUG, "nl80211: Extended capabilities",
+			    capa->ext_capa, capa->ext_capa_len);
+
+		len = nla_len(tb1[NL80211_ATTR_EXT_CAPA_MASK]);
+		capa->ext_capa_mask = os_malloc(len);
+		if (!capa->ext_capa_mask)
+			goto err;
+
+		os_memcpy(capa->ext_capa_mask,
+			  nla_data(tb1[NL80211_ATTR_EXT_CAPA_MASK]), len);
+		wpa_hexdump(MSG_DEBUG, "nl80211: Extended capabilities mask",
+			    capa->ext_capa_mask, capa->ext_capa_len);
+
+		drv->num_iface_ext_capa++;
+		if (drv->num_iface_ext_capa == NL80211_IFTYPE_MAX)
+			break;
+	}
+
+	return;
+
+err:
+	/* Cleanup allocated memory on error */
+	for (i = 0; i < NL80211_IFTYPE_MAX; i++) {
+		os_free(drv->iface_ext_capa[i].ext_capa);
+		drv->iface_ext_capa[i].ext_capa = NULL;
+		os_free(drv->iface_ext_capa[i].ext_capa_mask);
+		drv->iface_ext_capa[i].ext_capa_mask = NULL;
+		drv->iface_ext_capa[i].ext_capa_len = 0;
+	}
+	drv->num_iface_ext_capa = 0;
 }
 
 
@@ -566,6 +644,9 @@ static int wiphy_info_handler(struct nl_msg *msg, void *arg)
 				  nla_len(tb[NL80211_ATTR_EXT_CAPA]));
 			drv->extended_capa_len =
 				nla_len(tb[NL80211_ATTR_EXT_CAPA]);
+			wpa_hexdump(MSG_DEBUG,
+				    "nl80211: Driver-advertised extended capabilities (default)",
+				    drv->extended_capa, drv->extended_capa_len);
 		}
 		drv->extended_capa_mask =
 			os_malloc(nla_len(tb[NL80211_ATTR_EXT_CAPA_MASK]));
@@ -573,12 +654,18 @@ static int wiphy_info_handler(struct nl_msg *msg, void *arg)
 			os_memcpy(drv->extended_capa_mask,
 				  nla_data(tb[NL80211_ATTR_EXT_CAPA_MASK]),
 				  nla_len(tb[NL80211_ATTR_EXT_CAPA_MASK]));
+			wpa_hexdump(MSG_DEBUG,
+				    "nl80211: Driver-advertised extended capabilities mask (default)",
+				    drv->extended_capa_mask,
+				    drv->extended_capa_len);
 		} else {
 			os_free(drv->extended_capa);
 			drv->extended_capa = NULL;
 			drv->extended_capa_len = 0;
 		}
 	}
+
+	wiphy_info_extended_capab(drv, tb[NL80211_ATTR_IFTYPE_EXT_CAPA]);
 
 	if (tb[NL80211_ATTR_VENDOR_DATA]) {
 		struct nlattr *nl;
@@ -817,8 +904,12 @@ static int features_info_handler(struct nl_msg *msg, void *arg)
 
 		attr = tb_vendor[QCA_WLAN_VENDOR_ATTR_FEATURE_FLAGS];
 		if (attr) {
-			info->flags = nla_data(attr);
-			info->flags_len = nla_len(attr);
+			int len = nla_len(attr);
+			info->flags = os_malloc(len);
+			if (info->flags != NULL) {
+				os_memcpy(info->flags, nla_data(attr), len);
+				info->flags_len = len;
+			}
 		}
 		attr = tb_vendor[QCA_WLAN_VENDOR_ATTR_CONCURRENCY_CAPA];
 		if (attr)
@@ -881,6 +972,7 @@ static void qca_nl80211_get_features(struct wpa_driver_nl80211_data *drv)
 	if (check_feature(QCA_WLAN_VENDOR_FEATURE_OFFCHANNEL_SIMULTANEOUS,
 			  &info))
 		drv->capa.flags |= WPA_DRIVER_FLAGS_OFFCHANNEL_SIMULTANEOUS;
+	os_free(info.flags);
 }
 
 #endif /* CONFIG_DRIVER_NL80211_QCA */
